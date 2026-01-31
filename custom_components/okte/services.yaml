@@ -1,0 +1,80 @@
+fetch_data:
+  name: Fetch OKTE Data
+  description: Načíta dáta z OKTE API pre zadané obdobie
+  fields:
+    fetch_start_day:
+      name: Start Day
+      description: Počiatočný dátum vo formáte DD.MM.YYYY (prázdne = dnešok)
+      required: false
+      selector:
+        text:
+
+set_cheapest_window_hours:
+  name: Set Number of Hours for Cheapest Time Window
+  description: Nastaví počet hodín pre najlacnejšie časové okno a prepočíta všetky okná
+  fields:
+    window_hours:
+      name: Window Hours
+      description: Počet hodín pre najlacnejšie časové okno (prázdne = aktuálna hodnota)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 24
+          mode: box
+
+set_most_expensive_window_hours:
+  name: Set Number of Hours for Most Expensive Time Window
+  description: Nastaví počet hodín pre najdrahšie časové okno a prepočíta všetky okná
+  fields:
+    window_hours:
+      name: Window Hours
+      description: Počet hodín pre najdrahšie časové okno (prázdne = aktuálna hodnota)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 24
+          mode: box
+
+print_price_statistics:
+  name: Print Price Statistics
+  description: Vypíše štatistiky cien do logu
+  fields:
+    title:
+      name: Title
+      description: Nadpis pre štatistiky
+      required: false
+      default: "Štatistiky cien"
+      selector:
+        text:
+
+print_cheapest_window:
+  name: Print Cheapest Window
+  description: Vypíše informácie o najlacnejšom časovom okne do logu
+  fields:
+    window_hours:
+      name: Window Hours
+      description: Veľkosť časového okna v hodinách
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 24
+          mode: box
+
+print_most_expensive_window:
+  name: Print Most Expensive Window
+  description: Vypíše informácie o najdrahšom časovom okne do logu
+  fields:
+    window_hours:
+      name: Window Hours
+      description: Veľkosť časového okna v hodinách
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 24
+          mode: box
