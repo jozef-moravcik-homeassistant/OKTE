@@ -1,0 +1,51 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Nastavenie",
+                "description": "Nastavenie parametrov integrácie OKTE",
+                "data": {
+                    "fetch_time": "Čas vyčítavania údajov z OKTE (HH:MM format, napr., 14:00)",
+                    "most_expensive_time_window_period": "Predvolené časové okno pre analýzy maximálnych cien",
+                    "cheapest_time_window_period": "Predvolené časové okno pre analýzy minimálnych cien"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Nepodarilo sa pripojiť k OKTE API",
+            "invalid_time": "Neplatný formát času. Použi formát HH:MM (napr. 14:00)",
+            "unknown": "Vyskytla sa neznáma chyba"
+        },
+        "abort": {
+            "already_configured": "OKTE integrácia je už nakonfigurovaná"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Nastavenie",
+                "description": "Nastavenie parametrov integrácie OKTE",
+                "data": {
+                    "fetch_time": "Čas vyčítavania údajov z OKTE (HH:MM format, napr., 14:00)",
+                    "most_expensive_time_window_period": "Predvolené časové okno pre analýzy maximálnych cien",
+                    "cheapest_time_window_period": "Predvolené časové okno pre analýzy minimálnych cien"
+                }
+            }
+        }
+    },
+    "entity": {
+        "button": {
+            "fetch_data": {
+                "name": "Aktualizovať"
+            }
+        },
+        "number": {
+            "cheapest_window_hours": {
+                "name": "Najlacnejšie hodiny"
+            },
+            "most_expensive_window_hours": {
+                "name": "Najdrahšie hodiny"
+            }
+        }
+    }
+}
