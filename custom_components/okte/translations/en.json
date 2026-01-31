@@ -1,0 +1,51 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "OKTE Slovakia Setup",
+                "description": "Configure OKTE electricity price integration",
+                "data": {
+                    "fetch_time": "Daily fetch time (HH:MM format, e.g., 14:00)",
+                    "most_expensive_time_window_period": "Default time window for highest price analyses",
+                    "cheapest_time_window_period": "Default time window for lowest price analyses"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Cannot connect to OKTE API",
+            "invalid_time": "Invalid time format. Use HH:MM (e.g., 14:00)",
+            "unknown": "Unknown error occurred"
+        },
+        "abort": {
+            "already_configured": "OKTE integration is already configured"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "OKTE Options",
+                "description": "Configure OKTE integration options",
+                "data": {
+                    "fetch_time": "Daily fetch time (HH:MM format, e.g., 14:00)",
+                    "most_expensive_time_window_period": "Default time window for highest price analyses",
+                    "cheapest_time_window_period": "Default time window for lowest price analyses"
+                }
+            }
+        }
+    },
+    "entity": {
+        "button": {
+            "fetch_data": {
+                "name": "UPDATE"
+            }
+        },
+        "number": {
+            "cheapest_window_hours": {
+                "name": "Cheapest Hours"
+            },
+            "most_expensive_window_hours": {
+                "name": "Expensive Hours"
+            }
+        }
+    }
+}
