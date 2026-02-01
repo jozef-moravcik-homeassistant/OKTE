@@ -1,12 +1,14 @@
 {
     "domain": "okte",
-    "name": "OKTE Slovak Electricity Prices",
-    "version": "1.0.0",
-    "documentation": "https://github.com/Dodo7308/okte-hass",
-    "issue_tracker": "https://github.com/Dodo7308/okte-hass/issues",
-    "dependencies": [],
-    "codeowners": ["@jozefmoravcik"],
+    "name": "OKTE Slovak Energy Market",
+    "codeowners": ["@jozef-moravcik-homeassistant"],
     "config_flow": true,
-    "iot_class": "cloud_polling",
-    "integration_type": "device"
+    "dependencies": [],
+    "documentation": "https://github.com/jozef-moravcik-homeassistant/okte",
+    "integration_type": "service",
+    "iot_class": "cloud_polling"
+    "issue_tracker": "https://github.com/jozef-moravcik-homeassistant/okte/issues",
+    "loggers": ["okte"],
+    "requirements": ["crccheck==1.1"],
+    "version": "1.01.01"    
 }
