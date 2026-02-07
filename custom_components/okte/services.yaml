@@ -1,0 +1,7 @@
+system_started:
+  name: System Started
+  description: Initialize the OKTE system
+
+fetch_data:
+  name: Fetch Data
+  description: Manually fetch price data from OKTE API for all Master devices

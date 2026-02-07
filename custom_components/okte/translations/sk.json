@@ -1,0 +1,184 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavenie OKTE zariadenia",
+        "description": "Vyberte typ zariadenia",
+        "data": {
+          "device_type": "Typ zariadenia"
+        }
+      },
+      "master_parameters": {
+        "title": "OKTE Master zariadenie",
+        "description": "Konfigurácia Master zariadenia pre sťahovanie dát z API",
+        "data": {
+          "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
+          "fetch_time": "Čas denného sťahovania (HH:MM)",
+          "fetch_days": "Počet dní na stiahnutie"
+        }
+      },
+      "window_parameters": {
+        "title": "OKTE Calculator zariadenie",
+        "description": "Konfigurácia OKTE Calculator zariadenia pre výpočet časových okien",
+        "data": {
+          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia",
+          "window_size": "Veľkosť okna (hodiny)",
+          "time_from": "Časový rozsah od (HH:MM)",
+          "time_to": "Časový rozsah do (HH:MM)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Chyba pripojenia",
+      "invalid_time": "Neplatný formát času (použite HH:MM)",
+      "unknown": "Neočakávaná chyba"
+    },
+    "abort": {
+      "already_configured": "Zariadenie je už nakonfigurované",
+      "already_configured_master": "Master zariadenie je už nakonfigurované. Je možné mať len jedno Master zariadenie.",
+      "no_master_device": "Nie je nakonfigurované žiadne Master zariadenie. Najprv pridajte Master zariadenie."
+    }
+  },
+  "options": {
+    "step": {
+      "master_parameters": {
+        "title": "Nastavenia OKTE Master zariadenia",
+        "description": "Konfigurácia nastavení Master zariadenia",
+        "data": {
+          "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
+          "fetch_time": "Čas denného sťahovania (HH:MM)",
+          "fetch_days": "Počet dní na stiahnutie"
+        }
+      },
+      "window_parameters": {
+        "title": "Nastavenia OKTE Calculator zariadenia",
+        "description": "Konfigurácia nastavení OKTE Calculator zariadenia",
+        "data": {
+          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia",
+          "window_size": "Veľkosť okna (hodiny)",
+          "time_from": "Časový rozsah od (HH:MM)",
+          "time_to": "Časový rozsah do (HH:MM)"
+        }
+      }
+    }
+  },
+  "services": {
+    "system_started": {
+      "name": "Systém spustený",
+      "description": "Inicializácia systému"
+    },
+    "fetch_data": {
+      "name": "Stiahnuť dáta",
+      "description": "Manuálne stiahnutie cenových dát z API"
+    }
+  },
+  "selector": {
+    "device_type": {
+      "options": {
+        "master": "Master (sťahovanie dát z API)",
+        "window": "OKTE Calculator (výpočet časových okien)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "connection_status": {
+        "name": "Stav pripojenia"
+      },
+      "last_update": {
+        "name": "Posledná aktualizácia"
+      },
+      "data_count": {
+        "name": "Počet záznamov"
+      },
+      "current_price": {
+        "name": "Aktuálna cena"
+      },
+      "average_price_today": {
+        "name": "Priemerná cena dnes"
+      },
+      "min_price_today": {
+        "name": "Minimálna cena dnes"
+      },
+      "max_price_today": {
+        "name": "Maximálna cena dnes"
+      },
+      "average_price_tomorrow": {
+        "name": "Priemerná cena zajtra"
+      },
+      "min_price_tomorrow": {
+        "name": "Minimálna cena zajtra"
+      },
+      "max_price_tomorrow": {
+        "name": "Maximálna cena zajtra"
+      },
+      "prices_today": {
+        "name": "Ceny dnes"
+      },
+      "prices_tomorrow": {
+        "name": "Ceny zajtra"
+      },
+      "html_table_today": {
+        "name": "HTML tabuľka dnes"
+      },
+      "html_table_tomorrow": {
+        "name": "HTML tabuľka zajtra"
+      },
+      "lowest_price_window": {
+        "name": "Okno najnižšej ceny"
+      },
+      "lowest_price_window_today": {
+        "name": "Okno najnižšej ceny dnes"
+      },
+      "lowest_price_window_tomorrow": {
+        "name": "Okno najnižšej ceny zajtra"
+      },
+      "highest_price_window": {
+        "name": "Okno najvyššej ceny"
+      },
+      "highest_price_window_today": {
+        "name": "Okno najvyššej ceny dnes"
+      },
+      "highest_price_window_tomorrow": {
+        "name": "Okno najvyššej ceny zajtra"
+      },
+      "lowest_price_window_size": {
+        "name": "Najnižšie ceny - Veľkosť okna (čas)"
+      },
+      "highest_price_window_size": {
+        "name": "Najvyššie ceny - Veľkosť okna (čas)"
+      },
+      "lowest_price_search_window_size": {
+        "name": "Najnižšie ceny - Veľkosť vyhľadávacieho okna"
+      },
+      "highest_price_search_window_size": {
+        "name": "Najvyššie ceny - Veľkosť vyhľadávacieho okna"
+      }
+    },
+    "button": {
+      "update_data": {
+        "name": "Aktualizovať údaje"
+      }
+    },
+    "binary_sensor": {
+      "detector_lowest_price": {
+        "name": "Detektor najnižšej ceny"
+      },
+      "detector_lowest_price_today": {
+        "name": "Detektor najnižšej ceny dnes"
+      },
+      "detector_lowest_price_tomorrow": {
+        "name": "Detektor najnižšej ceny zajtra"
+      },
+      "detector_highest_price": {
+        "name": "Detektor najvyššej ceny"
+      },
+      "detector_highest_price_today": {
+        "name": "Detektor najvyššej ceny dnes"
+      },
+      "detector_highest_price_tomorrow": {
+        "name": "Detektor najvyššej ceny zajtra"
+      }
+    }
+  }
+}

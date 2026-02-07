@@ -1,0 +1,184 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OKTE Device Setup",
+        "description": "Select device type",
+        "data": {
+          "device_type": "Device Type"
+        }
+      },
+      "master_parameters": {
+        "title": "OKTE Master Device",
+        "description": "Configure Master device for API data fetching",
+        "data": {
+          "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
+          "fetch_time": "Daily fetch time (HH:MM)",
+          "fetch_days": "Number of days to fetch"
+        }
+      },
+      "window_parameters": {
+        "title": "OKTE Calculator Device",
+        "description": "Configure OKTE Calculator device for time window calculations",
+        "data": {
+          "include_device_name_in_entity": "Insert device name before entity name",
+          "window_size": "Window size (hours)",
+          "time_from": "Time range from (HH:MM)",
+          "time_to": "Time range to (HH:MM)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_time": "Invalid time format (use HH:MM)",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "already_configured_master": "Master device is already configured. Only one Master device is allowed.",
+      "no_master_device": "No Master device configured. Please add a Master device first."
+    }
+  },
+  "options": {
+    "step": {
+      "master_parameters": {
+        "title": "OKTE Master Device Settings",
+        "description": "Configure Master device settings",
+        "data": {
+          "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
+          "fetch_time": "Daily fetch time (HH:MM)",
+          "fetch_days": "Number of days to fetch"
+        }
+      },
+      "window_parameters": {
+        "title": "OKTE Calculator Device Settings",
+        "description": "Configure OKTE Calculator device settings",
+        "data": {
+          "include_device_name_in_entity": "Insert device name before entity name",
+          "window_size": "Window size (hours)",
+          "time_from": "Time range from (HH:MM)",
+          "time_to": "Time range to (HH:MM)"
+        }
+      }
+    }
+  },
+  "services": {
+    "system_started": {
+      "name": "System Started",
+      "description": "Initialize the system"
+    },
+    "fetch_data": {
+      "name": "Fetch Data",
+      "description": "Manually fetch price data from API"
+    }
+  },
+  "selector": {
+    "device_type": {
+      "options": {
+        "master": "Master (API Data Fetcher)",
+        "window": "OKTE Calculator (Time Window Calculator)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "connection_status": {
+        "name": "Connection Status"
+      },
+      "last_update": {
+        "name": "Last Update"
+      },
+      "data_count": {
+        "name": "Data Count"
+      },
+      "current_price": {
+        "name": "Current Price"
+      },
+      "average_price_today": {
+        "name": "Average Price Today"
+      },
+      "min_price_today": {
+        "name": "Min Price Today"
+      },
+      "max_price_today": {
+        "name": "Max Price Today"
+      },
+      "average_price_tomorrow": {
+        "name": "Average Price Tomorrow"
+      },
+      "min_price_tomorrow": {
+        "name": "Min Price Tomorrow"
+      },
+      "max_price_tomorrow": {
+        "name": "Max Price Tomorrow"
+      },
+      "prices_today": {
+        "name": "Prices Today"
+      },
+      "prices_tomorrow": {
+        "name": "Prices Tomorrow"
+      },
+      "html_table_today": {
+        "name": "HTML Table Today"
+      },
+      "html_table_tomorrow": {
+        "name": "HTML Table Tomorrow"
+      },
+      "lowest_price_window": {
+        "name": "Lowest Price Window"
+      },
+      "lowest_price_window_today": {
+        "name": "Lowest Price Window Today"
+      },
+      "lowest_price_window_tomorrow": {
+        "name": "Lowest Price Window Tomorrow"
+      },
+      "highest_price_window": {
+        "name": "Highest Price Window"
+      },
+      "highest_price_window_today": {
+        "name": "Highest Price Window Today"
+      },
+      "highest_price_window_tomorrow": {
+        "name": "Highest Price Window Tomorrow"
+      },
+      "lowest_price_window_size": {
+        "name": "Lowest Price - Window Size (time)"
+      },
+      "highest_price_window_size": {
+        "name": "Highest Price - Window Size (time)"
+      },
+      "lowest_price_search_window_size": {
+        "name": "Lowest Price - Search Window Size"
+      },
+      "highest_price_search_window_size": {
+        "name": "Highest Price - Search Window Size"
+      }
+    },
+    "button": {
+      "update_data": {
+        "name": "Update Data"
+      }
+    },
+    "binary_sensor": {
+      "detector_lowest_price": {
+        "name": "Detector Lowest Price"
+      },
+      "detector_lowest_price_today": {
+        "name": "Detector Lowest Price Today"
+      },
+      "detector_lowest_price_tomorrow": {
+        "name": "Detector Lowest Price Tomorrow"
+      },
+      "detector_highest_price": {
+        "name": "Detector Highest Price"
+      },
+      "detector_highest_price_today": {
+        "name": "Detector Highest Price Today"
+      },
+      "detector_highest_price_tomorrow": {
+        "name": "Detector Highest Price Tomorrow"
+      }
+    }
+  }
+}
