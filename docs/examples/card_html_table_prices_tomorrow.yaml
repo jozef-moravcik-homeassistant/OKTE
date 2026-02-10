@@ -1,0 +1,5 @@
+type: grid
+cards:
+  - type: custom:html-template-card
+    content: |
+      {{ state_attr('sensor.okte_html_table_tomorrow', 'html_table') }}

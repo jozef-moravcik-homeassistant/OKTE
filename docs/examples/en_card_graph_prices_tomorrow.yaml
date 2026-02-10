@@ -1,0 +1,102 @@
+type: custom:apexcharts-card
+grid_options:
+  columns: 12
+  rows: auto
+card_mod:
+  style: |
+    ha-card {
+      min-width: 400px;
+      padding: 0px 10px 0px 0px;
+    }
+    ha-card div#header__title {
+      font-size: 17px !important;
+      color:#1a60b2;
+      padding: 5px 0px 10px 10px;
+    }
+    ha-card span#uom {
+      font-size: 12px !important;
+    }
+    ha-card span#state {
+      font-size: 16px !important;
+    }
+    ha-card div#state__name {
+      font-size: 10px !important;
+    }
+    .apexcharts-bar-series {
+      transform: translateX(0.8%) !important;
+    }
+apex_config:
+  chart:
+    zoom:
+      autoScaleYaxis: false
+  plotOptions:
+    bar:
+      columnWidth: 70%
+graph_span: 24h
+span:
+  start: day
+  offset: +1d
+header:
+  show: true
+  title: OKTE - Electricity prices tomorrow [€/MWh]
+  show_states: true
+  colorize_states: true
+now:
+  show: true
+experimental:
+  color_threshold: true
+series:
+  - entity: sensor.okte_prices_tomorrow
+    name: Cena €/MWh
+    type: column
+    color_threshold:
+      - value: 0
+        color: red
+      - value: 0
+        color: "#FFAA10"
+      - value: 20
+        color: "#219610"
+      - value: 300
+        color: "#2196F0"
+    stroke_width: 0
+    color: "#219610"
+    data_generator: |
+      const data = entity.attributes.period_data || [];
+      return data
+        .slice(0,96)
+        .map((entry) => {
+          return [new Date(entry.time).getTime(), entry.price];
+        });
+    show:
+      extremas: false
+      in_header: false
+  - entity: sensor.okte_current_price
+    name: Current price
+    color: "#219610"
+    data_generator: |
+      const now = new Date();
+      const currentValue = parseFloat(entity.state);
+      return [[now.getTime(), currentValue]];
+    show:
+      in_chart: false
+      in_header: true
+  - entity: sensor.okte_min_price_tomorrow
+    name: Min tomorrow
+    color: red
+    data_generator: |
+      const now = new Date();
+      const minValue = parseFloat(entity.state);
+      return [[now.getTime(), minValue]];
+    show:
+      in_chart: false
+      in_header: true
+  - entity: sensor.okte_max_price_tomorrow
+    name: Max tomorrow
+    color: "#2196F0"
+    data_generator: |
+      const now = new Date();
+      const maxValue = parseFloat(entity.state);
+      return [[now.getTime(), maxValue]];
+    show:
+      in_chart: false
+      in_header: true

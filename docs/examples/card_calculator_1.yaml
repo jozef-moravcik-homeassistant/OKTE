@@ -1,0 +1,51 @@
+type: grid
+cards:
+  - type: entities
+    entities:
+      - entity: binary_sensor.okte_1_detector_lowest_price
+      - entity: binary_sensor.okte_1_detector_lowest_price_today
+      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
+      - entity: sensor.okte_1_lowest_price_window
+      - entity: sensor.okte_1_lowest_price_window_today
+      - entity: sensor.okte_1_lowest_price_window_tomorrow
+      - entity: sensor.okte_1_lowest_price_window_size
+      - entity: sensor.okte_1_lowest_price_search_window_size
+    title: OKTE Calculator 1
+    grid_options:
+      columns: full
+      rows: auto
+  - type: entities
+    entities:
+      - entity: switch.okte_1_lowest_price_window_from_as_day_start
+      - entity: time.okte_1_lowest_price_time_from
+      - entity: switch.okte_1_lowest_price_window_to_as_day_end
+      - entity: time.okte_1_lowest_price_time_to
+      - entity: number.okte_1_lowest_price_window_size
+    grid_options:
+      columns: full
+      rows: auto
+  - type: entities
+    entities:
+      - entity: binary_sensor.okte_1_detector_highest_price
+      - entity: binary_sensor.okte_1_detector_highest_price_today
+      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
+      - entity: sensor.okte_1_highest_price_window
+      - entity: sensor.okte_1_highest_price_window_today
+      - entity: sensor.okte_1_highest_price_window_tomorrow
+      - entity: sensor.okte_1_highest_price_window_size
+      - entity: sensor.okte_1_highest_price_search_window_size
+    title: OKTE Calculator 1
+    grid_options:
+      columns: full
+      rows: auto
+  - type: entities
+    entities:
+      - entity: switch.okte_1_highest_price_window_from_as_day_start
+      - entity: time.okte_1_highest_price_time_from
+      - entity: switch.okte_1_highest_price_window_to_as_day_end
+      - entity: time.okte_1_highest_price_time_to
+      - entity: number.okte_1_highest_price_window_size
+    grid_options:
+      columns: full
+      rows: auto
+column_span: 2

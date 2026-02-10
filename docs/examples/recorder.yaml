@@ -1,0 +1,6 @@
+exclude:
+  entities:
+    - sensor.okte_prices_today
+    - sensor.okte_prices_tomorrow
+    - sensor.okte_html_table_today
+    - sensor.okte_html_table_tomorrow

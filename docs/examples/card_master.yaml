@@ -1,0 +1,29 @@
+type: grid
+cards:
+  - type: entities
+    entities:
+      - entity: sensor.okte_current_price
+      - type: divider
+      - entity: sensor.okte_prices_today
+      - entity: sensor.okte_prices_tomorrow
+      - type: divider
+      - entity: sensor.okte_max_price_today
+      - entity: sensor.okte_max_price_tomorrow
+      - type: divider
+      - entity: sensor.okte_min_price_today
+      - entity: sensor.okte_min_price_tomorrow
+      - type: divider
+      - entity: sensor.okte_average_price_today
+      - entity: sensor.okte_average_price_tomorrow
+      - type: divider
+      - entity: sensor.okte_html_table_today
+      - entity: sensor.okte_html_table_tomorrow
+      - type: divider
+      - entity: sensor.okte_data_count
+      - entity: sensor.okte_connection_status
+      - entity: sensor.okte_last_update
+      - entity: button.okte_update_data
+    title: OKTE Master
+    grid_options:
+      columns: full
+column_span: 2
