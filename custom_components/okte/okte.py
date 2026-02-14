@@ -123,8 +123,8 @@ def fetch_okte_data(fetch_days=2, fetch_start_day=None, hass=None):
     
     url = f"{OKTE_API_BASE_URL}?deliveryDayFrom={delivery_day_from}&deliveryDayTo={delivery_day_to}"
     
-    LOGGER.info(f"Fetching data from: {url}")
-    LOGGER.info(f"Period: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')} ({fetch_days} days)")
+    LOGGER.info(f"OKTE API: Fetching data from: {url}")
+    LOGGER.info(f"OKTE API: Period: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')} ({fetch_days} days)")
     
     try:
         request = urllib.request.Request(
@@ -177,20 +177,20 @@ def fetch_okte_data(fetch_days=2, fetch_start_day=None, hass=None):
             }
             result_array.append(record)
         
-        LOGGER.info(f"Fetched {len(result_array)} records")
+        LOGGER.info(f"OKTE API: Successfully fetched {len(result_array)} records from API")
         return result_array
         
     except urllib.error.HTTPError as e:
-        LOGGER.error(f"HTTP error {e.code}: {e.reason}")
+        LOGGER.error(f"OKTE API: HTTP error {e.code}: {e.reason}")
         return []
     except urllib.error.URLError as e:
-        LOGGER.error(f"URL error: {e.reason}")
+        LOGGER.error(f"OKTE API: URL error: {e.reason}")
         return []
     except json.JSONDecodeError as e:
-        LOGGER.error(f"JSON parsing error: {e}")
+        LOGGER.error(f"OKTE API: JSON parsing error: {e}")
         return []
     except Exception as e:
-        LOGGER.error(f"Unexpected error: {e}")
+        LOGGER.error(f"OKTE API: Unexpected error: {e}")
         return []
 
 
@@ -243,6 +243,197 @@ def calculate_price_statistics(data):
         'min_record': min_record,
         'max_record': max_record
     }
+
+
+def find_window_cross_days(today_data, tomorrow_data, periods, time_from_str, time_to_str, find_lowest=True, hass=None):
+    """
+    Find time window with lowest or highest average price across two days.
+    Search from today time_from to tomorrow time_to.
+    
+    Args:
+        today_data (list): Array of objects with prices for today
+        tomorrow_data (list): Array of objects with prices for tomorrow
+        periods (int): Size of time window in periods
+        time_from_str (str): Start time in format 'HH:MM' (applied to today)
+        time_to_str (str): End time in format 'HH:MM' (applied to tomorrow)
+        find_lowest (bool): True for lowest price, False for highest price
+        hass: Home Assistant instance for timezone conversion
+    
+    Returns:
+        dict: Information about found time window
+    """
+    # Convert periods to int
+    periods = int(periods)
+    
+    # Parse time range
+    try:
+        time_from = datetime.strptime(time_from_str, '%H:%M').time()
+        time_to = datetime.strptime(time_to_str, '%H:%M').time()
+    except ValueError:
+        return {
+            'found': False,
+            'message': 'Invalid time format',
+            'start_time': None,
+            'end_time': None,
+            'periods': None,
+            'min_price': None,
+            'max_price': None,
+            'avg_price': None,
+            'records': []
+        }
+    
+    # Filter and combine data from both days
+    combined_data = []
+    
+    # Add today's data from time_from onwards
+    for record in today_data:
+        if record['price'] is not None and record['deliveryStart'] is not None and record['HourStartCET'] is not None:
+            try:
+                period_start_time = datetime.strptime(record['HourStartCET'], '%H:%M').time()
+                if period_start_time >= time_from:
+                    combined_data.append(record)
+            except ValueError:
+                continue
+    
+    # Add tomorrow's data up to time_to
+    for record in tomorrow_data:
+        if record['price'] is not None and record['deliveryStart'] is not None and record['HourStartCET'] is not None:
+            try:
+                period_start_time = datetime.strptime(record['HourStartCET'], '%H:%M').time()
+                if period_start_time <= time_to:
+                    combined_data.append(record)
+            except ValueError:
+                continue
+    
+    # Check if we have enough data
+    if len(combined_data) < periods:
+        return {
+            'found': False,
+            'message': f'Not enough data for {periods}-period window across both days',
+            'start_time': None,
+            'end_time': None,
+            'periods': periods,
+            'min_price': None,
+            'max_price': None,
+            'avg_price': None,
+            'records': []
+        }
+    
+    # Find best window using sliding window approach
+    best_window = None
+    best_avg_price = None
+    
+    for i in range(len(combined_data) - periods + 1):
+        window_records = combined_data[i:i + periods]
+        
+        # Calculate window statistics
+        prices = [r['price'] for r in window_records]
+        avg_price = sum(prices) / len(prices)
+        
+        # Check if this is better
+        if best_window is None:
+            best_window = {
+                'records': window_records,
+                'avg_price': avg_price,
+                'min_price': min(prices),
+                'max_price': max(prices)
+            }
+            best_avg_price = avg_price
+        elif find_lowest and avg_price < best_avg_price:
+            best_window = {
+                'records': window_records,
+                'avg_price': avg_price,
+                'min_price': min(prices),
+                'max_price': max(prices)
+            }
+            best_avg_price = avg_price
+        elif not find_lowest and avg_price > best_avg_price:
+            best_window = {
+                'records': window_records,
+                'avg_price': avg_price,
+                'min_price': min(prices),
+                'max_price': max(prices)
+            }
+            best_avg_price = avg_price
+    
+    if best_window:
+        # Get start and end times
+        start_record = best_window['records'][0]
+        end_record = best_window['records'][-1]
+        
+        # Parse delivery times
+        start_utc = datetime.fromisoformat(start_record['deliveryStart'].replace('Z', '+00:00'))
+        end_utc = datetime.fromisoformat(end_record['deliveryEnd'].replace('Z', '+00:00'))
+        
+        # Convert to local timezone
+        try:
+            import zoneinfo
+            ha_timezone = hass.config.time_zone if hass else 'Europe/Bratislava'
+            tz = zoneinfo.ZoneInfo(ha_timezone)
+            start_local = start_utc.astimezone(tz)
+            end_local = end_utc.astimezone(tz)
+        except ImportError:
+            start_local = start_utc + timedelta(hours=1)
+            end_local = end_utc + timedelta(hours=1)
+        
+        # Format times
+        start_time_with_tz = start_local.isoformat()
+        end_time_with_tz = end_local.isoformat()
+        start_time_utc = f"UTC: {start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        end_time_utc = f"UTC: {end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        start_time_local = start_local.strftime('%d.%m.%Y %H:%M')
+        end_time_local = end_local.strftime('%d.%m.%Y %H:%M')
+        
+        # Convert records to old format
+        formatted_records = []
+        for record in best_window['records']:
+            try:
+                delivery_start_dt = datetime.fromisoformat(record.get('deliveryStart').replace('Z', '+00:00'))
+                delivery_end_dt = datetime.fromisoformat(record.get('deliveryEnd').replace('Z', '+00:00'))
+                period_start_utc = delivery_start_dt.strftime('%H:%M')
+                period_end_utc = delivery_end_dt.strftime('%H:%M')
+            except:
+                period_start_utc = record.get('HourStartCET')
+                period_end_utc = record.get('HourEndCET')
+            
+            formatted_record = {
+                'price': record.get('price'),
+                'period': record.get('period'),
+                'delivery_start': record.get('deliveryStart'),
+                'delivery_end': record.get('deliveryEnd'),
+                'period_start': period_start_utc,
+                'period_end': period_end_utc,
+                'date': record.get('deliveryDayCET'),
+                'time_local': format_local_time(record.get('deliveryStart'), '%d.%m.%Y %H:%M', hass)
+            }
+            formatted_records.append(formatted_record)
+        
+        return {
+            'found': True,
+            'start_time': start_time_with_tz,
+            'end_time': end_time_with_tz,
+            'start_time_UTC': start_time_utc,
+            'end_time_UTC': end_time_utc,
+            'start_time_local': start_time_local,
+            'end_time_local': end_time_local,
+            'periods': periods,
+            'min_price': best_window['min_price'],
+            'max_price': best_window['max_price'],
+            'avg_price': best_window['avg_price'],
+            'records': formatted_records
+        }
+    else:
+        return {
+            'found': False,
+            'message': 'No window found',
+            'start_time': None,
+            'end_time': None,
+            'periods': periods,
+            'min_price': None,
+            'max_price': None,
+            'avg_price': None,
+            'records': []
+        }
 
 
 def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lowest=True, hass=None):
@@ -503,6 +694,7 @@ class OKTE_Master_Instance:
             ENTITY_PRICES_TOMORROW: "OK",  # State will be "OK", data in attributes
             ENTITY_HTML_TABLE_TODAY: "OK",  # State will be "OK", data in attributes
             ENTITY_HTML_TABLE_TOMORROW: "OK",  # State will be "OK", data in attributes
+            ENTITY_ERROR_CODE: 0,  # Bitmap of error codes, 0 = no errors
         }
         
         # Storage for sensor attributes (for long data like HTML, JSON)
@@ -518,6 +710,7 @@ class OKTE_Master_Instance:
             ENTITY_PRICES_TOMORROW: {},
             ENTITY_HTML_TABLE_TODAY: {},
             ENTITY_HTML_TABLE_TOMORROW: {},
+            ENTITY_ERROR_CODE: {},
         }
 
         # Price data storage
@@ -527,11 +720,15 @@ class OKTE_Master_Instance:
             'tomorrow_data': [],
             'last_fetch': None
         }
+        
+        # Retry timer for failed API fetch
+        self._retry_timer = None
 
         # Entity IDs
         self.SENSOR_ENTITY_CONNECTION_STATUS = None
         self.SENSOR_ENTITY_LAST_UPDATE = None
         self.SENSOR_ENTITY_DATA_COUNT = None
+        self.SENSOR_ENTITY_ERROR_CODE = None
         self.SENSOR_ENTITY_CURRENT_PRICE = None
         self.SENSOR_ENTITY_AVERAGE_PRICE_TODAY = None
         self.SENSOR_ENTITY_MIN_PRICE_TODAY = None
@@ -553,6 +750,7 @@ class OKTE_Master_Instance:
             self.SENSOR_ENTITY_CONNECTION_STATUS = f"sensor.{ENTITY_PREFIX}_{ENTITY_CONNECTION_STATUS}"
             self.SENSOR_ENTITY_LAST_UPDATE = f"sensor.{ENTITY_PREFIX}_{ENTITY_LAST_UPDATE}"
             self.SENSOR_ENTITY_DATA_COUNT = f"sensor.{ENTITY_PREFIX}_{ENTITY_DATA_COUNT}"
+            self.SENSOR_ENTITY_ERROR_CODE = f"sensor.{ENTITY_PREFIX}_{ENTITY_ERROR_CODE}"
             self.SENSOR_ENTITY_CURRENT_PRICE = f"sensor.{ENTITY_PREFIX}_{ENTITY_CURRENT_PRICE}"
             self.SENSOR_ENTITY_AVERAGE_PRICE_TODAY = f"sensor.{ENTITY_PREFIX}_{ENTITY_AVERAGE_PRICE_TODAY}"
             self.SENSOR_ENTITY_MIN_PRICE_TODAY = f"sensor.{ENTITY_PREFIX}_{ENTITY_MIN_PRICE_TODAY}"
@@ -582,10 +780,99 @@ class OKTE_Master_Instance:
         except Exception as e:
             LOGGER.error(f"Error during System Started: {e}")
 
+    async def update_current_price(self):
+        """Update only current price from already fetched data - no API call."""
+        try:
+            # Check if we have data
+            if not self.price_data.get('all_data'):
+                LOGGER.debug("No data available for current price update")
+                return
+            
+            data = self.price_data['all_data']
+            current_local_time = self._get_current_local_time()
+            current_hour = current_local_time.replace(minute=0, second=0, microsecond=0)
+            
+            # Find current price record
+            current_record = None
+            for record in data:
+                try:
+                    delivery_start = record.get('deliveryStart')
+                    if not delivery_start:
+                        continue
+                    
+                    # Parse UTC time and convert to local
+                    if delivery_start.endswith('Z'):
+                        utc_start = datetime.fromisoformat(delivery_start.replace('Z', '+00:00'))
+                    else:
+                        utc_start = datetime.fromisoformat(delivery_start)
+                    
+                    # Convert to local timezone
+                    try:
+                        import zoneinfo
+                        ha_timezone = self.hass.config.time_zone
+                        tz = zoneinfo.ZoneInfo(ha_timezone)
+                        local_start = utc_start.astimezone(tz)
+                    except (ImportError, Exception):
+                        local_start = utc_start + timedelta(hours=1)
+                    
+                    # Compare hours
+                    local_start_hour = local_start.replace(minute=0, second=0, microsecond=0)
+                    if local_start_hour == current_hour:
+                        current_record = record
+                        LOGGER.debug(f"Current price updated: {record['price']} EUR/MWh for {local_start.strftime('%H:%M')}")
+                        break
+                except Exception as e:
+                    continue
+            
+            # Update current price sensor
+            self.sensor_states[ENTITY_CURRENT_PRICE] = current_record['price'] if current_record else None
+            
+            # Update attributes
+            if current_record:
+                # Get statistics from stored data
+                today_data = self.price_data.get('today_data', [])
+                tomorrow_data = self.price_data.get('tomorrow_data', [])
+                all_data = self.price_data.get('all_data', [])
+                
+                today_stats = calculate_price_statistics(today_data)
+                tomorrow_stats = calculate_price_statistics(tomorrow_data)
+                all_stats = calculate_price_statistics(all_data)
+                
+                self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
+                    'period': current_record.get('period'),
+                    'period_start': format_local_time(current_record.get('deliveryStart'), '%H:%M', self.hass),
+                    'period_end': format_local_time(current_record.get('deliveryEnd'), '%H:%M', self.hass),
+                    'total_records': len(all_data),
+                    'today_average': today_stats['avg_price'],
+                    'tomorrow_average': tomorrow_stats['avg_price'],
+                    'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
+                }
+            else:
+                # No current record found
+                today_data = self.price_data.get('today_data', [])
+                tomorrow_data = self.price_data.get('tomorrow_data', [])
+                all_data = self.price_data.get('all_data', [])
+                
+                today_stats = calculate_price_statistics(today_data)
+                tomorrow_stats = calculate_price_statistics(tomorrow_data)
+                all_stats = calculate_price_statistics(all_data)
+                
+                self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
+                    'total_records': len(all_data),
+                    'today_average': today_stats['avg_price'],
+                    'tomorrow_average': tomorrow_stats['avg_price'],
+                    'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
+                }
+            
+            LOGGER.debug("OKTE API: Current price sensor updated from cached data")
+            
+        except Exception as e:
+            LOGGER.error(f"OKTE API: Error updating current price: {e}")
+
     async def fetch_and_process_data(self):
         """Fetch data from API and process it."""
         try:
-            LOGGER.info("Fetching price data from OKTE API...")
+            LOGGER.info("OKTE API: Fetching price data from OKTE API...")
             
             # Fetch data with hass parameter for timezone conversion
             data = await self.hass.async_add_executor_job(
@@ -604,12 +891,12 @@ class OKTE_Master_Instance:
                 today = current_local_time.date()
                 tomorrow = today + timedelta(days=1)
                 
-                LOGGER.debug(f"Filtering data for today: {today.strftime('%Y-%m-%d')} (local timezone)")
+                LOGGER.debug(f"OKTE API: Filtering data for today: {today.strftime('%Y-%m-%d')} (local timezone)")
                 
                 self.price_data['today_data'] = filter_data_by_date(data, today)
                 self.price_data['tomorrow_data'] = filter_data_by_date(data, tomorrow)
                 
-                LOGGER.debug(f"Found {len(self.price_data['today_data'])} records for today, {len(self.price_data['tomorrow_data'])} records for tomorrow")
+                LOGGER.info(f"OKTE API: Successfully fetched {len(data)} records - Today: {len(self.price_data['today_data'])}, Tomorrow: {len(self.price_data['tomorrow_data'])}")
                 
                 # Calculate statistics
                 today_stats = calculate_price_statistics(self.price_data['today_data'])
@@ -619,6 +906,15 @@ class OKTE_Master_Instance:
                 self.sensor_states[ENTITY_CONNECTION_STATUS] = True
                 self.sensor_states[ENTITY_LAST_UPDATE] = current_local_time.isoformat()
                 self.sensor_states[ENTITY_DATA_COUNT] = len(data)
+                
+                # Clear API fetch error bit (bit 0)
+                self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] & ~1
+                
+                # Cancel retry timer if it exists (fetch succeeded)
+                if self._retry_timer is not None:
+                    self._retry_timer()
+                    self._retry_timer = None
+                    LOGGER.debug("OKTE API: Cancelled retry timer - fetch successful")
                 
                 # Connection status attributes
                 self.sensor_attributes[ENTITY_CONNECTION_STATUS] = {
@@ -785,7 +1081,7 @@ class OKTE_Master_Instance:
                             'period_end': record.get('HourEndCET'),
                             'date': record.get('deliveryDayCET'),
                             'day_name': delivery_local.strftime('%A'),
-                            'hour_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
+                            'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
                             'timestamp': int(delivery_start.timestamp() * 1000)  # For ApexCharts
                         }
                         today_period_data.append(period_entry)
@@ -795,12 +1091,12 @@ class OKTE_Master_Instance:
                 
                 today_prices_list = [entry['price'] for entry in today_period_data]
                 today_timestamps_list = [entry['time'] for entry in today_period_data]
-                today_labels_list = [entry['hour_label'] for entry in today_period_data]
+                today_labels_list = [entry['period_label'] for entry in today_period_data]
                 
                 self.sensor_states[ENTITY_PRICES_TODAY] = len(today_valid_records)
                 self.sensor_attributes[ENTITY_PRICES_TODAY] = {
                     'period_data': today_period_data,
-                    'total_hours': len(today_period_data),
+                    'periods': len(today_period_data),
                     'date_range': today.strftime('%Y-%m-%d'),
                     'prices_list': today_prices_list,
                     'timestamps_list': today_timestamps_list,
@@ -838,7 +1134,7 @@ class OKTE_Master_Instance:
                             'period_end': record.get('HourEndCET'),
                             'date': record.get('deliveryDayCET'),
                             'day_name': delivery_local.strftime('%A'),
-                            'hour_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
+                            'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
                             'timestamp': int(delivery_start.timestamp() * 1000)
                         }
                         tomorrow_period_data.append(period_entry)
@@ -848,12 +1144,12 @@ class OKTE_Master_Instance:
                 
                 tomorrow_prices_list = [entry['price'] for entry in tomorrow_period_data]
                 tomorrow_timestamps_list = [entry['time'] for entry in tomorrow_period_data]
-                tomorrow_labels_list = [entry['hour_label'] for entry in tomorrow_period_data]
+                tomorrow_labels_list = [entry['period_label'] for entry in tomorrow_period_data]
                 
                 self.sensor_states[ENTITY_PRICES_TOMORROW] = len(tomorrow_valid_records)
                 self.sensor_attributes[ENTITY_PRICES_TOMORROW] = {
                     'period_data': tomorrow_period_data,
-                    'total_hours': len(tomorrow_period_data),
+                    'periods': len(tomorrow_period_data),
                     'date_range': tomorrow.strftime('%Y-%m-%d'),
                     'prices_list': tomorrow_prices_list,
                     'timestamps_list': tomorrow_timestamps_list,
@@ -905,7 +1201,13 @@ class OKTE_Master_Instance:
                 LOGGER.info(f"Successfully processed {len(data)} price records")
             else:
                 self.sensor_states[ENTITY_CONNECTION_STATUS] = False
-                LOGGER.error("No data received from API")
+                LOGGER.error("OKTE API: No data received from API")
+                
+                # Set API fetch error bit (bit 0)
+                self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 1
+                
+                # Schedule retry in 1 minute
+                self._schedule_retry()
                 
                 # Connection status attributes - disconnected
                 current_local_time = self._get_current_local_time()
@@ -917,7 +1219,13 @@ class OKTE_Master_Instance:
                 
         except Exception as e:
             self.sensor_states[ENTITY_CONNECTION_STATUS] = False
-            LOGGER.error(f"Error fetching data: {e}")
+            LOGGER.error(f"OKTE API: Error fetching data: {e}")
+            
+            # Set API fetch error bit (bit 0)
+            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 1
+            
+            # Schedule retry in 1 minute
+            self._schedule_retry()
             
             # Connection status attributes - error
             current_local_time = self._get_current_local_time()
@@ -926,6 +1234,28 @@ class OKTE_Master_Instance:
                 'status_description': f'Error during data fetch: {str(e)[:100]}',
                 'last_attempt': current_local_time.isoformat(),
             }
+
+    def _schedule_retry(self):
+        """Schedule retry of API fetch in 1 minute if previous attempt failed."""
+        from homeassistant.helpers.event import async_call_later
+        
+        # Cancel existing retry timer if any
+        if self._retry_timer is not None:
+            self._retry_timer()
+            self._retry_timer = None
+        
+        # Schedule retry in 60 seconds
+        async def retry_fetch(_now=None):
+            """Retry API fetch."""
+            self._retry_timer = None
+            LOGGER.info("OKTE API: Retrying API fetch after previous failure...")
+            await self.fetch_and_process_data()
+            # Send update signal
+            from homeassistant.helpers.dispatcher import async_dispatcher_send
+            async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
+        
+        self._retry_timer = async_call_later(self.hass, 60, retry_fetch)
+        LOGGER.info("OKTE API: Scheduled retry in 60 seconds")
 
     def _get_price_color(self, price):
         """Get color for price based on value."""
@@ -1218,29 +1548,24 @@ class OKTE_Master_Instance:
 
     async def my_controller(self):
         """Main controller logic for Master device."""
-        LOGGER.debug("=== MASTER CONTROLLER - START ===")
+        LOGGER.debug("OKTE API: Master controller - updating current price from cache")
         
         if self._is_running:
-            LOGGER.debug("Already running, skipping this cycle")
+            LOGGER.debug("OKTE API: Already running, skipping this cycle")
             return
         
         self._is_running = True
 
         try:
-            LOGGER.debug("Master controller cycle started")
-            
-            # Fetch and process data
-            await self.fetch_and_process_data()
-            
-            LOGGER.debug("Master controller cycle completed successfully")
+            # Update current price from cached data (no API call)
+            await self.update_current_price()
             
         except Exception as e:
-            LOGGER.error(f"Error in master controller: {e}")
+            LOGGER.error(f"OKTE API: Error in master controller: {e}")
             return
 
         finally:
             # Update all sensors via dispatcher
-            LOGGER.info(f"Sending dispatcher update signal to: {DOMAIN}_feedback_update_{self._entry_id}")
             async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
             self._is_running = False
 
@@ -1276,6 +1601,14 @@ class OKTE_Window_Instance:
         
         # Storage for sensor attributes
         self.sensor_attributes = {}
+        
+        # Optimization: track when calculations are needed
+        self._last_calculation_time = None  # Last time we did full calculation
+        self._last_master_fetch_time = None  # Last fetch time from master device
+        self._last_config_values = None  # Last configuration values for change detection
+        
+        # Debounce timer for config changes
+        self._debounce_timer = None  # Timer handle for debounced calculation
 
         # Entity IDs
         self.SENSOR_ENTITY_LOWEST_PRICE_WINDOW = None
@@ -1339,6 +1672,34 @@ class OKTE_Window_Instance:
         time_from: str = DEFAULT_TIME_FROM
         time_to: str = DEFAULT_TIME_TO
 
+    def schedule_calculation(self, delay: float = None):
+        """Schedule calculation with debounce to prevent multiple rapid recalculations.
+        
+        Args:
+            delay: Delay in seconds. If None, uses CALCULATION_DEBOUNCE_DELAY from const.py
+        """
+        from homeassistant.helpers.event import async_call_later
+        from .const import CALCULATION_DEBOUNCE_DELAY
+        
+        if delay is None:
+            delay = CALCULATION_DEBOUNCE_DELAY
+        
+        # Cancel existing timer if any
+        if self._debounce_timer is not None:
+            self._debounce_timer()  # Call the cancel function
+            self._debounce_timer = None
+            LOGGER.debug(f"OKTE Calculation: Cancelled previous debounce timer")
+        
+        # Schedule new calculation
+        async def delayed_calculation(_now=None):
+            """Execute calculation after debounce delay."""
+            self._debounce_timer = None
+            LOGGER.debug(f"OKTE Calculation: Debounce timer expired, running calculation")
+            await self.my_controller()
+        
+        self._debounce_timer = async_call_later(self.hass, delay, delayed_calculation)
+        LOGGER.debug(f"OKTE Calculation: Scheduled calculation with {delay}s debounce")
+
     def system_started(self) -> None:
         """System started callback."""
         try:
@@ -1396,13 +1757,23 @@ class OKTE_Window_Instance:
     async def calculate_windows(self):
         """Calculate time windows from master device data."""
         try:
-            # Log current time for debugging
+            # Get current time
             current_local_time = self._get_current_local_time()
-            LOGGER.debug(f"=== CALCULATE WINDOWS START === Local time: {current_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            current_15min_period = current_local_time.replace(minute=(current_local_time.minute // 15) * 15, second=0, microsecond=0)
+            
+            # Get current configuration values FIRST (before any returns)
+            current_config = {
+                'lowest_window_size': int(self.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)),
+                'lowest_time_from': self.time_values.get(ENTITY_LOWEST_TIME_FROM, dt_time(0, 0)),
+                'lowest_time_to': self.time_values.get(ENTITY_LOWEST_TIME_TO, dt_time(23, 45)),
+                'highest_window_size': int(self.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)),
+                'highest_time_from': self.time_values.get(ENTITY_HIGHEST_TIME_FROM, dt_time(0, 0)),
+                'highest_time_to': self.time_values.get(ENTITY_HIGHEST_TIME_TO, dt_time(23, 45)),
+            }
             
             # Check if master is available
             if not self.is_master_available():
-                LOGGER.warning("Master device not available - sensors will be unavailable")
+                LOGGER.warning("OKTE Calculation: Master device not available - sensors will be unavailable")
                 # Set all sensors to None to make them unavailable
                 self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = None
                 self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TODAY] = None
@@ -1416,12 +1787,15 @@ class OKTE_Window_Instance:
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
-                LOGGER.debug("=== CALCULATE WINDOWS END (master unavailable) ===")
+                
+                # Send update signal to reflect unavailable state
+                from homeassistant.helpers.dispatcher import async_dispatcher_send
+                async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
                 return
             
             price_data = self.get_master_price_data()
             if not price_data:
-                LOGGER.warning("No price data available from master device")
+                LOGGER.warning("OKTE Calculation: No price data available from master device")
                 # Set all sensors to None to make them unavailable
                 self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = None
                 self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TODAY] = None
@@ -1435,24 +1809,64 @@ class OKTE_Window_Instance:
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
+                
+                # Send update signal to reflect unavailable state
+                from homeassistant.helpers.dispatcher import async_dispatcher_send
+                async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
                 return
+            
+            # Get master's last fetch time
+            master_fetch_time = price_data.get('last_fetch')
+            
+            # Check if full calculation is needed
+            need_calculation = False
+            reason = []
+            
+            # First run - always calculate
+            if self._last_calculation_time is None:
+                need_calculation = True
+                reason.append("first run")
+            
+            # New data from master API
+            elif master_fetch_time and master_fetch_time != self._last_master_fetch_time:
+                need_calculation = True
+                reason.append("new API data")
+                self._last_master_fetch_time = master_fetch_time
+            
+            # Configuration changed
+            elif current_config != self._last_config_values:
+                need_calculation = True
+                reason.append("configuration changed")
+                self._last_config_values = current_config
+            
+            # 15-minute period changed (for detector updates)
+            elif self._last_calculation_time and current_15min_period != self._last_calculation_time:
+                need_calculation = True
+                reason.append("15-min period changed")
+            
+            # Skip calculation if not needed
+            if not need_calculation:
+                LOGGER.debug(f"OKTE Calculation: Skipping - no changes detected (last calc: {self._last_calculation_time.strftime('%H:%M:%S') if self._last_calculation_time else 'never'})")
+                return
+            
+            # Perform calculation
+            LOGGER.info(f"OKTE Calculation: Running window calculations - Reason: {', '.join(reason)}")
+            LOGGER.debug(f"OKTE Calculation: Local time: {current_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             
             today_data = price_data.get('today_data', [])
             tomorrow_data = price_data.get('tomorrow_data', [])
             
             # Get window settings
-            # Lowest price window settings
-            lowest_window_size = int(self.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3))
-            lowest_time_from = self.time_values.get(ENTITY_LOWEST_TIME_FROM, dt_time(0, 0)).strftime("%H:%M")
-            lowest_time_to = self.time_values.get(ENTITY_LOWEST_TIME_TO, dt_time(23, 45)).strftime("%H:%M")
+            lowest_window_size = current_config['lowest_window_size']
+            lowest_time_from = current_config['lowest_time_from'].strftime("%H:%M")
+            lowest_time_to = current_config['lowest_time_to'].strftime("%H:%M")
             
-            # Highest price window settings
-            highest_window_size = int(self.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3))
-            highest_time_from = self.time_values.get(ENTITY_HIGHEST_TIME_FROM, dt_time(0, 0)).strftime("%H:%M")
-            highest_time_to = self.time_values.get(ENTITY_HIGHEST_TIME_TO, dt_time(23, 45)).strftime("%H:%M")
+            highest_window_size = current_config['highest_window_size']
+            highest_time_from = current_config['highest_time_from'].strftime("%H:%M")
+            highest_time_to = current_config['highest_time_to'].strftime("%H:%M")
             
-            LOGGER.debug(f"Lowest window: size={lowest_window_size}, from={lowest_time_from}, to={lowest_time_to}")
-            LOGGER.debug(f"Highest window: size={highest_window_size}, from={highest_time_from}, to={highest_time_to}")
+            LOGGER.debug(f"OKTE Calculation: Lowest window: size={lowest_window_size}, from={lowest_time_from}, to={lowest_time_to}")
+            LOGGER.debug(f"OKTE Calculation: Highest window: size={highest_window_size}, from={highest_time_from}, to={highest_time_to}")
             
             # Calculate lowest price windows
             lowest_today = find_window_in_time_range(
@@ -1488,6 +1902,27 @@ class OKTE_Window_Instance:
                 highest_window_size, 
                 highest_time_from, 
                 highest_time_to, 
+                find_lowest=False,
+                hass=self.hass
+            )
+            
+            # Calculate cross-day windows for main sensors (from today time_from to tomorrow time_to)
+            lowest_cross_day = find_window_cross_days(
+                today_data,
+                tomorrow_data,
+                lowest_window_size,
+                lowest_time_from,
+                lowest_time_to,
+                find_lowest=True,
+                hass=self.hass
+            )
+            
+            highest_cross_day = find_window_cross_days(
+                today_data,
+                tomorrow_data,
+                highest_window_size,
+                highest_time_from,
+                highest_time_to,
                 find_lowest=False,
                 hass=self.hass
             )
@@ -1594,51 +2029,75 @@ class OKTE_Window_Instance:
             else:
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
             
-            # Update general sensors (without today/tomorrow) - use currently active window
-            # For LOWEST_PRICE_WINDOW - use today if detector is active, otherwise use tomorrow if available
-            if self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TODAY]:
-                self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TODAY]
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = True
-            elif self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW]:
-                self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TOMORROW]
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = True
-            elif lowest_today['found']:
-                # Today window exists but not active yet
-                self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TODAY]
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
-            elif lowest_tomorrow['found']:
-                # Tomorrow window exists
-                self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TOMORROW]
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
+            # Update general sensors (without today/tomorrow) - use cross-day windows
+            # These search from today time_from to tomorrow time_to
+            
+            # LOWEST_PRICE_WINDOW - cross-day search result
+            if lowest_cross_day['found']:
+                self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = json.dumps(lowest_cross_day)
+                
+                # Check if current time is within this window for detector
+                try:
+                    utc_start = datetime.fromisoformat(lowest_cross_day['start_time'].replace('Z', '+00:00'))
+                    utc_end = datetime.fromisoformat(lowest_cross_day['end_time'].replace('Z', '+00:00'))
+                    
+                    try:
+                        import zoneinfo
+                        ha_timezone = self.hass.config.time_zone
+                        tz = zoneinfo.ZoneInfo(ha_timezone)
+                        local_start = utc_start.astimezone(tz)
+                        local_end = utc_end.astimezone(tz)
+                    except ImportError:
+                        local_start = utc_start + timedelta(hours=1)
+                        local_end = utc_end + timedelta(hours=1)
+                    
+                    self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = local_start <= current_local_time < local_end
+                except Exception as e:
+                    LOGGER.debug(f"Error checking lowest price window detector: {e}")
+                    self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
             else:
-                # No windows found
                 self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = None
                 self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
             
-            # For HIGHEST_PRICE_WINDOW - use today if detector is active, otherwise use tomorrow if available
-            if self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY]:
-                self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TODAY]
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = True
-            elif self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW]:
-                self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = True
-            elif highest_today['found']:
-                # Today window exists but not active yet
-                self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TODAY]
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
-            elif highest_tomorrow['found']:
-                # Tomorrow window exists
-                self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
+            # HIGHEST_PRICE_WINDOW - cross-day search result
+            if highest_cross_day['found']:
+                self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = json.dumps(highest_cross_day)
+                
+                # Check if current time is within this window for detector
+                try:
+                    utc_start = datetime.fromisoformat(highest_cross_day['start_time'].replace('Z', '+00:00'))
+                    utc_end = datetime.fromisoformat(highest_cross_day['end_time'].replace('Z', '+00:00'))
+                    
+                    try:
+                        import zoneinfo
+                        ha_timezone = self.hass.config.time_zone
+                        tz = zoneinfo.ZoneInfo(ha_timezone)
+                        local_start = utc_start.astimezone(tz)
+                        local_end = utc_end.astimezone(tz)
+                    except ImportError:
+                        local_start = utc_start + timedelta(hours=1)
+                        local_end = utc_end + timedelta(hours=1)
+                    
+                    self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = local_start <= current_local_time < local_end
+                except Exception as e:
+                    LOGGER.debug(f"Error checking highest price window detector: {e}")
+                    self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
             else:
-                # No windows found
                 self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW] = None
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
             
-            LOGGER.debug("Window calculations completed successfully")
+            # Store calculation time for optimization
+            self._last_calculation_time = current_15min_period
+            
+            LOGGER.info(f"OKTE Calculation: Window calculations completed successfully")
+            
+            # Send update signal to refresh all sensors with new values
+            from homeassistant.helpers.dispatcher import async_dispatcher_send
+            async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
+            LOGGER.debug(f"OKTE Calculation: Sent update signal to refresh sensors")
             
         except Exception as e:
-            LOGGER.error(f"Error calculating windows: {e}")
+            LOGGER.error(f"OKTE Calculation: Error calculating windows: {e}")
             # On error, set all sensors to unavailable
             self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW] = None
             self.sensor_states[ENTITY_LOWEST_PRICE_WINDOW_TODAY] = None
@@ -1652,27 +2111,28 @@ class OKTE_Window_Instance:
             self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
             self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
             self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
+            
+            # Send update signal even on error to reflect unavailable state
+            from homeassistant.helpers.dispatcher import async_dispatcher_send
+            async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
+            LOGGER.debug(f"OKTE Calculation: Sent update signal after error")
 
     async def my_controller(self):
         """Main controller logic for Window device."""
-        LOGGER.debug("=== WINDOW CONTROLLER - START ===")
+        LOGGER.debug("OKTE Calculation: Window controller - checking if calculation needed")
         
         if self._is_running:
-            LOGGER.debug("Already running, skipping this cycle")
+            LOGGER.debug("OKTE Calculation: Already running, skipping this cycle")
             return
         
         self._is_running = True
 
         try:
-            LOGGER.debug("Window controller cycle started")
-            
-            # Calculate windows
+            # Calculate windows (optimized - skips if not needed)
             await self.calculate_windows()
             
-            LOGGER.debug("Window controller cycle completed successfully")
-            
         except Exception as e:
-            LOGGER.error(f"Error in window controller: {e}")
+            LOGGER.error(f"OKTE Calculation: Error in window controller: {e}")
             return
 
         finally:

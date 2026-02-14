@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.const import STATE_ON, STATE_OFF
 
 from .const import (
     DOMAIN,
@@ -94,6 +95,13 @@ class OkteAutoTimeSwitch(SwitchEntity):
     
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        
+        # Values are loaded from Config Entry in __init__.py
+        # Just ensure instance has the value and sync to entity
+        if hasattr(self.instance, 'switch_values') and self._entity_id_key in self.instance.switch_values:
+            self._attr_is_on = self.instance.switch_values[self._entity_id_key]
+        
         # Listen for updates
         self.async_on_remove(
             async_dispatcher_connect(
@@ -153,10 +161,18 @@ class OkteAutoTimeSwitch(SwitchEntity):
         """Turn the switch on."""
         self._attr_is_on = True
         
-        # Store in instance
+        # Store in instance for calculations
         if not hasattr(self.instance, 'switch_values'):
             self.instance.switch_values = {}
         self.instance.switch_values[self._entity_id_key] = True
+        
+        # Store in config_entry.options for persistence
+        new_options = {**self.config_entry.options}
+        new_options[self._entity_id_key] = True
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options=new_options
+        )
         
         # Update the corresponding time value
         await self._update_time_value()
@@ -164,8 +180,12 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # Notify number entity to update its state (make it read-only)
         async_dispatcher_send(self.hass, f"{DOMAIN}_number_update_{self.config_entry.entry_id}")
         
-        # Trigger recalculation
-        await self.instance.my_controller()
+        # Trigger recalculation with debounce (prevents multiple rapid recalculations)
+        if hasattr(self.instance, 'schedule_calculation'):
+            self.instance.schedule_calculation()
+        else:
+            # Fallback if schedule_calculation not available
+            await self.instance.my_controller()
         
         self.async_write_ha_state()
     
@@ -173,16 +193,28 @@ class OkteAutoTimeSwitch(SwitchEntity):
         """Turn the switch off."""
         self._attr_is_on = False
         
-        # Store in instance
+        # Store in instance for calculations
         if not hasattr(self.instance, 'switch_values'):
             self.instance.switch_values = {}
         self.instance.switch_values[self._entity_id_key] = False
         
+        # Store in config_entry.options for persistence
+        new_options = {**self.config_entry.options}
+        new_options[self._entity_id_key] = False
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options=new_options
+        )
+        
         # Notify number entity to update its state (make it editable)
         async_dispatcher_send(self.hass, f"{DOMAIN}_number_update_{self.config_entry.entry_id}")
         
-        # Trigger recalculation
-        await self.instance.my_controller()
+        # Trigger recalculation with debounce (prevents multiple rapid recalculations)
+        if hasattr(self.instance, 'schedule_calculation'):
+            self.instance.schedule_calculation()
+        else:
+            # Fallback if schedule_calculation not available
+            await self.instance.my_controller()
         
         self.async_write_ha_state()
     
@@ -245,9 +277,7 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # Notify the time entity to update
         async_dispatcher_send(self.hass, f"{DOMAIN}_time_update_{self.config_entry.entry_id}")
         
-        # Trigger recalculation if value changed
-        if old_value != time_value:
-            await self.instance.my_controller()
+        # Note: Recalculation is triggered by the calling switch (async_turn_on/off) with debounce
     
     def _parse_sun_time(self, time_attr) -> datetime | None:
         """Parse sun time attribute and convert to local datetime."""

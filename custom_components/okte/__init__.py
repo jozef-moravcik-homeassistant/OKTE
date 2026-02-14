@@ -55,6 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         SERVICE_SYSTEM_STARTED, SERVICE_FETCH_DATA,
         DEBOUNCE_DELAY,
         DEFAULT_FALLBACK_CHECK_INTERVAL,
+        DEFAULT_FALLBACK_CHECK_INTERVAL_CALCULATOR,
         ENTITY_LOWEST_WINDOW_SIZE, ENTITY_LOWEST_TIME_FROM, ENTITY_LOWEST_TIME_TO,
         ENTITY_HIGHEST_WINDOW_SIZE, ENTITY_HIGHEST_TIME_FROM, ENTITY_HIGHEST_TIME_TO,
         ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_AUTO_TIME_TO,
@@ -108,26 +109,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         instance.settings.include_device_name_in_entity = include_device_name_in_entity
         instance.settings.master_device = master_device
         
-        # Initialize number values for window size (will be set by number entities)
+        # Load number values from Config Entry (or use defaults)
         instance.number_values = {
-            ENTITY_LOWEST_WINDOW_SIZE: 3,  # Default 3 hours
-            ENTITY_HIGHEST_WINDOW_SIZE: 3,  # Default 3 hours
+            ENTITY_LOWEST_WINDOW_SIZE: entry.options.get(ENTITY_LOWEST_WINDOW_SIZE, 3),
+            ENTITY_HIGHEST_WINDOW_SIZE: entry.options.get(ENTITY_HIGHEST_WINDOW_SIZE, 3),
         }
         
-        # Initialize time values (will be set by time entities)
+        # Load time values from Config Entry (or use defaults)
+        # Time values are stored as strings in format "HH:MM"
+        def parse_time_from_config(time_str, default_time):
+            """Parse time string from config or return default."""
+            if time_str:
+                try:
+                    parts = time_str.split(':')
+                    return dt_time(int(parts[0]), int(parts[1]))
+                except (ValueError, IndexError):
+                    return default_time
+            return default_time
+        
         instance.time_values = {
-            ENTITY_LOWEST_TIME_FROM: dt_time(0, 0),  # Default 00:00
-            ENTITY_LOWEST_TIME_TO: dt_time(23, 45),  # Default 23:45
-            ENTITY_HIGHEST_TIME_FROM: dt_time(0, 0),  # Default 00:00
-            ENTITY_HIGHEST_TIME_TO: dt_time(23, 45),  # Default 23:45
+            ENTITY_LOWEST_TIME_FROM: parse_time_from_config(
+                entry.options.get(ENTITY_LOWEST_TIME_FROM), dt_time(0, 0)
+            ),
+            ENTITY_LOWEST_TIME_TO: parse_time_from_config(
+                entry.options.get(ENTITY_LOWEST_TIME_TO), dt_time(23, 59)
+            ),
+            ENTITY_HIGHEST_TIME_FROM: parse_time_from_config(
+                entry.options.get(ENTITY_HIGHEST_TIME_FROM), dt_time(0, 0)
+            ),
+            ENTITY_HIGHEST_TIME_TO: parse_time_from_config(
+                entry.options.get(ENTITY_HIGHEST_TIME_TO), dt_time(23, 59)
+            ),
         }
         
-        # Initialize switch values (will be set by switch entities)
+        # Load switch values from Config Entry (or use defaults)
         instance.switch_values = {
-            ENTITY_LOWEST_AUTO_TIME_FROM: False,
-            ENTITY_LOWEST_AUTO_TIME_TO: False,
-            ENTITY_HIGHEST_AUTO_TIME_FROM: False,
-            ENTITY_HIGHEST_AUTO_TIME_TO: False,
+            ENTITY_LOWEST_AUTO_TIME_FROM: entry.options.get(ENTITY_LOWEST_AUTO_TIME_FROM, False),
+            ENTITY_LOWEST_AUTO_TIME_TO: entry.options.get(ENTITY_LOWEST_AUTO_TIME_TO, False),
+            ENTITY_HIGHEST_AUTO_TIME_FROM: entry.options.get(ENTITY_HIGHEST_AUTO_TIME_FROM, False),
+            ENTITY_HIGHEST_AUTO_TIME_TO: entry.options.get(ENTITY_HIGHEST_AUTO_TIME_TO, False),
         }
 
     # Set hass and entry_id
@@ -147,6 +167,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 CONF_DEVICE_NAME: device_name,
                 CONF_INCLUDE_DEVICE_NAME_IN_ENTITY: include_device_name_in_entity,
                 CONF_FETCH_TIME: fetch_time,
+                "options": dict(entry.options),  # Store options for update_listener comparison
             }
         else:
             hass.data[DOMAIN][entry.entry_id] = {
@@ -155,6 +176,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 CONF_DEVICE_NAME: device_name,
                 CONF_INCLUDE_DEVICE_NAME_IN_ENTITY: include_device_name_in_entity,
                 CONF_MASTER_DEVICE: master_device,
+                "options": dict(entry.options),  # Store options for update_listener comparison
             }
 
         LOGGER.info(f"=== SETUP ENTRY === Entry ID: {entry.entry_id}, Device Type: {device_type}, Device Name: {device_name}")
@@ -232,13 +254,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async def async_run_my_controller(_now=None):
             """Periodic execution of my_controller."""
             await instance.my_controller()
+        
+        async def async_run_fetch_data(_now=None):
+            """Fetch data from API - for Master device daily schedule."""
+            if hasattr(instance, 'fetch_and_process_data'):
+                LOGGER.info("OKTE API: Running scheduled API fetch...")
+                await instance.fetch_and_process_data()
+                # Also send update signal
+                async_dispatcher_send(hass, f"{DOMAIN}_feedback_update_{entry.entry_id}")
+            else:
+                LOGGER.warning("OKTE API: fetch_and_process_data not available for this device type")
 
         # Schedule initial calls
         async_call_later(hass, 2, async_update_settings_sensors)
-        async_call_later(hass, 3, async_run_my_controller)
         
-        # For Master device: schedule daily fetch at specified time
+        # For Master device: initial API fetch on startup and schedule daily fetch
         if device_type == DEVICE_TYPE_MASTER:
+            # Fetch data on startup (after 5 seconds)
+            async_call_later(hass, 5, async_run_fetch_data)
+            LOGGER.info("Scheduled initial API fetch on startup (5 seconds)")
+            
+            # First my_controller call AFTER fetch completes (after 8 seconds)
+            async_call_later(hass, 8, async_run_my_controller)
+            LOGGER.info("Scheduled first controller update after API fetch (8 seconds)")
+            
             try:
                 fetch_time_parts = fetch_time.split(':')
                 fetch_hour = int(fetch_time_parts[0])
@@ -247,15 +286,55 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entry.async_on_unload(
                     async_track_time_change(
                         hass,
-                        async_run_my_controller,
+                        async_run_fetch_data,  # Use fetch_data callback for API calls
                         hour=fetch_hour,
                         minute=fetch_minute,
                         second=0
                     )
                 )
-                LOGGER.info(f"Scheduled daily fetch at {fetch_time}")
+                LOGGER.info(f"Scheduled daily API fetch at {fetch_time}")
+                
+                # Schedule additional fetches after midnight (00:00:10, 00:01:00, 00:02:00)
+                entry.async_on_unload(
+                    async_track_time_change(
+                        hass,
+                        async_run_fetch_data,
+                        hour=0,
+                        minute=0,
+                        second=10
+                    )
+                )
+                LOGGER.info("Scheduled API fetch at 00:00:10")
+                
+                entry.async_on_unload(
+                    async_track_time_change(
+                        hass,
+                        async_run_fetch_data,
+                        hour=0,
+                        minute=1,
+                        second=0
+                    )
+                )
+                LOGGER.info("Scheduled API fetch at 00:01:00")
+                
+                entry.async_on_unload(
+                    async_track_time_change(
+                        hass,
+                        async_run_fetch_data,
+                        hour=0,
+                        minute=2,
+                        second=0
+                    )
+                )
+                LOGGER.info("Scheduled API fetch at 00:02:00")
             except Exception as e:
                 LOGGER.error(f"Error scheduling daily fetch: {e}")
+        
+        # For Calculator device: wait for Master to have data before first calculation
+        elif device_type == DEVICE_TYPE_CALCULATOR:
+            # First my_controller call after Master has fetched data (after 10 seconds)
+            async_call_later(hass, 10, async_run_my_controller)
+            LOGGER.info("Scheduled first calculator update after Master fetch (10 seconds)")
         
         # For Window device: setup state change listener for master device
         if device_type == DEVICE_TYPE_CALCULATOR and master_device:
@@ -270,7 +349,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     
                     async def async_state_changed(event):
                         """React to state changes with debounce."""
-                        LOGGER.debug("Master device data updated, recalculating windows")
+                        LOGGER.debug("OKTE Calculation: Master device data updated, recalculating windows")
                         await instance.my_controller()
                     
                     entry.async_on_unload(
@@ -280,6 +359,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             async_state_changed
                         )
                     )
+            
+            # Setup 15-minute time tracker for precise detector updates
+            # This ensures detectors update exactly at the start of each 15-minute period
+            entry.async_on_unload(
+                async_track_time_change(
+                    hass,
+                    async_run_my_controller,
+                    minute=[0, 15, 30, 45],
+                    second=0
+                )
+            )
+            LOGGER.info("Scheduled detector updates every 15 minutes (:00, :15, :30, :45)")
             
             # Listen for device name changes and update entity names directly in Entity Registry
             from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -356,11 +447,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated)
             )
         
-        # Fallback periodic check
-        if hasattr(instance.settings, 'fallback_check_interval'):
-            fallback_interval = instance.settings.fallback_check_interval
+        # Fallback periodic check - use different intervals for Master and Calculator
+        if device_type == DEVICE_TYPE_MASTER:
+            # Master: 5 minutes (300s)
+            if hasattr(instance.settings, 'fallback_check_interval'):
+                fallback_interval = instance.settings.fallback_check_interval
+            else:
+                fallback_interval = DEFAULT_FALLBACK_CHECK_INTERVAL
         else:
-            fallback_interval = DEFAULT_FALLBACK_CHECK_INTERVAL
+            # Calculator: 30 seconds for faster detector updates
+            if hasattr(instance.settings, 'fallback_check_interval'):
+                fallback_interval = instance.settings.fallback_check_interval
+            else:
+                fallback_interval = DEFAULT_FALLBACK_CHECK_INTERVAL_CALCULATOR
         
         if fallback_interval > 0:
             LOGGER.info(f"Fallback periodic check enabled: every {fallback_interval} seconds")
@@ -420,8 +519,22 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     from .const import (
         CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
-        CONF_DEVICE_TYPE, DEVICE_TYPE_MASTER
+        CONF_DEVICE_TYPE, DEVICE_TYPE_MASTER,
+        ENTITY_LOWEST_WINDOW_SIZE, ENTITY_HIGHEST_WINDOW_SIZE,
+        ENTITY_LOWEST_TIME_FROM, ENTITY_LOWEST_TIME_TO,
+        ENTITY_HIGHEST_TIME_FROM, ENTITY_HIGHEST_TIME_TO,
+        ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_AUTO_TIME_TO,
+        ENTITY_HIGHEST_AUTO_TIME_FROM, ENTITY_HIGHEST_AUTO_TIME_TO
     )
+    
+    # List of entity value keys that don't require reload
+    entity_value_keys = {
+        ENTITY_LOWEST_WINDOW_SIZE, ENTITY_HIGHEST_WINDOW_SIZE,
+        ENTITY_LOWEST_TIME_FROM, ENTITY_LOWEST_TIME_TO,
+        ENTITY_HIGHEST_TIME_FROM, ENTITY_HIGHEST_TIME_TO,
+        ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_AUTO_TIME_TO,
+        ENTITY_HIGHEST_AUTO_TIME_FROM, ENTITY_HIGHEST_AUTO_TIME_TO
+    }
     
     # Get old and new values of checkbox
     old_include_device_name = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get(CONF_INCLUDE_DEVICE_NAME_IN_ENTITY)
@@ -430,7 +543,33 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         entry.data.get(CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY)
     )
     
-    # Reload entry
+    # Check if only entity values changed (no reload needed)
+    # Get previous options from hass.data
+    old_options = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get('options', {})
+    new_options = entry.options
+    
+    # Find what changed
+    changed_keys = set()
+    for key in set(list(old_options.keys()) + list(new_options.keys())):
+        if old_options.get(key) != new_options.get(key):
+            changed_keys.add(key)
+    
+    # If ONLY entity values changed, skip reload
+    only_entity_values_changed = changed_keys and changed_keys.issubset(entity_value_keys)
+    
+    if only_entity_values_changed:
+        LOGGER.debug(f"Only entity values changed: {changed_keys}, skipping reload")
+        # Update stored options for next comparison
+        if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+            hass.data[DOMAIN][entry.entry_id]['options'] = dict(new_options)
+        return
+    
+    # Store new options for next comparison
+    if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
+        hass.data[DOMAIN][entry.entry_id]['options'] = dict(new_options)
+    
+    # Reload entry (only if non-entity-value options changed)
+    LOGGER.info(f"Config options changed (not just entity values), reloading entry")
     await hass.config_entries.async_reload(entry.entry_id)
     
     # If checkbox changed, update entity names in registry

@@ -96,10 +96,17 @@ class OkteTimeEntity(TimeEntity):
             if 'from' in entity_id:
                 self._attr_native_value = dt_time(0, 0)  # 00:00
             else:
-                self._attr_native_value = dt_time(23, 45)  # 23:45
+                self._attr_native_value = dt_time(23, 59)  # 23:59
     
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        
+        # Values are loaded from Config Entry in __init__.py
+        # Just ensure instance has the value
+        if hasattr(self.instance, 'time_values') and self._entity_id_key in self.instance.time_values:
+            self._attr_native_value = self.instance.time_values[self._entity_id_key]
+        
         # Listen for updates
         self.async_on_remove(
             async_dispatcher_connect(
@@ -283,13 +290,25 @@ class OkteTimeEntity(TimeEntity):
         
         self._attr_native_value = clean_value
         
-        # Store in instance
+        # Store in instance for calculations
         if not hasattr(self.instance, 'time_values'):
             self.instance.time_values = {}
         self.instance.time_values[self._entity_id_key] = clean_value
         
-        # Trigger recalculation
-        await self.instance.my_controller()
+        # Store in config_entry.options for persistence (as string "HH:MM")
+        new_options = {**self.config_entry.options}
+        new_options[self._entity_id_key] = clean_value.strftime("%H:%M")
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options=new_options
+        )
+        
+        # Trigger recalculation with debounce (prevents multiple rapid recalculations)
+        if hasattr(self.instance, 'schedule_calculation'):
+            self.instance.schedule_calculation()
+        else:
+            # Fallback if schedule_calculation not available
+            await self.instance.my_controller()
         
         # Update state
         self.async_write_ha_state()

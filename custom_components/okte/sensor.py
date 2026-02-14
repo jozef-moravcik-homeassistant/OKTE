@@ -105,6 +105,19 @@ async def async_setup_entry(
                 instance, 
                 entry_id=entry.entry_id,
                 device_type=device_type,
+                entity_id=ENTITY_ERROR_CODE, 
+                name="Error Code",
+                translations=translations, 
+                icon="mdi:alert-circle",
+                default_value=0,
+                enabled_by_default=True,
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+            SensorEntityDefinition(
+                hass,
+                instance, 
+                entry_id=entry.entry_id,
+                device_type=device_type,
                 entity_id=ENTITY_CURRENT_PRICE, 
                 name="Current Price",
                 translations=translations, 
@@ -786,62 +799,21 @@ class SensorEntityDefinition(SensorEntity):
                 "records": []
             }
         
-        # For duration sensors - add start/end times and periods
+        # For duration sensors - add periods only
         elif self._entity_id in [ENTITY_LOWEST_WINDOW_SIZE_TIME, ENTITY_HIGHEST_WINDOW_SIZE_TIME]:
             attrs = {}
             
             # Determine if this is lowest or highest
             is_lowest = self._entity_id == ENTITY_LOWEST_WINDOW_SIZE_TIME
             
-            if hasattr(self._instance, 'number_values') and hasattr(self._instance, 'time_values'):
-                from datetime import datetime, time as dt_time
-                import zoneinfo
-                
+            if hasattr(self._instance, 'number_values'):
                 # Get periods from number entity
                 if is_lowest:
                     periods = self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
-                    time_from = self._instance.time_values.get(ENTITY_LOWEST_TIME_FROM)
-                    time_to = self._instance.time_values.get(ENTITY_LOWEST_TIME_TO)
                 else:
                     periods = self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
-                    time_from = self._instance.time_values.get(ENTITY_HIGHEST_TIME_FROM)
-                    time_to = self._instance.time_values.get(ENTITY_HIGHEST_TIME_TO)
                 
                 attrs["periods"] = periods
-                
-                # Convert local times to UTC
-                if time_from and time_to:
-                    try:
-                        # Get timezone
-                        ha_timezone = self.hass.config.time_zone
-                        tz_local = zoneinfo.ZoneInfo(ha_timezone)
-                        tz_utc = zoneinfo.ZoneInfo('UTC')
-                        
-                        # Create datetime objects for today with local timezone
-                        today = datetime.now(tz_local).date()
-                        dt_from_local = datetime.combine(today, time_from, tzinfo=tz_local)
-                        dt_to_local = datetime.combine(today, time_to, tzinfo=tz_local)
-                        
-                        # Convert to UTC
-                        dt_from_utc = dt_from_local.astimezone(tz_utc)
-                        dt_to_utc = dt_to_local.astimezone(tz_utc)
-                        
-                        # Format times
-                        attrs["start_time_local"] = dt_from_local.strftime("%H:%M")
-                        attrs["end_time_local"] = dt_to_local.strftime("%H:%M")
-                        attrs["start_time_UTC"] = f"UTC: {dt_from_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-                        attrs["end_time_UTC"] = f"UTC: {dt_to_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-                    except Exception as e:
-                        LOGGER.error(f"Error converting times to UTC: {e}")
-                        attrs["start_time_local"] = None
-                        attrs["end_time_local"] = None
-                        attrs["start_time_UTC"] = None
-                        attrs["end_time_UTC"] = None
-                else:
-                    attrs["start_time_local"] = None
-                    attrs["end_time_local"] = None
-                    attrs["start_time_UTC"] = None
-                    attrs["end_time_UTC"] = None
             
             return attrs
         

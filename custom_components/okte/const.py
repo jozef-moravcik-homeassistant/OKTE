@@ -122,7 +122,7 @@ CONF_MASTER_DEVICE = "master_device"
 DEFAULT_MASTER_DEVICE = None
 
 CONF_WINDOW_SIZE = "window_size"
-DEFAULT_WINDOW_SIZE = 4
+DEFAULT_WINDOW_SIZE = 12
 
 CONF_TIME_FROM = "time_from"
 DEFAULT_TIME_FROM = "00:00"
@@ -156,6 +156,7 @@ ENTITY_PRICES_TODAY = "prices_today"
 ENTITY_PRICES_TOMORROW = "prices_tomorrow"
 ENTITY_HTML_TABLE_TODAY = "html_table_today"
 ENTITY_HTML_TABLE_TOMORROW = "html_table_tomorrow"
+ENTITY_ERROR_CODE = "error_code"
 
 # Window Device Entities
 ENTITY_LOWEST_PRICE_WINDOW = "lowest_price_window"
@@ -196,5 +197,7 @@ ENTITY_HIGHEST_AUTO_TIME_TO = "highest_price_window_to_as_day_end"
 ##############################################################################################################################
 # Default values of static parameters ########################################################################################
 ##############################################################################################################################
-DEFAULT_FALLBACK_CHECK_INTERVAL = 300  # 5 minutes
+DEFAULT_FALLBACK_CHECK_INTERVAL = 15  # 15 seconds - for Master devices (fast current price updates)
+DEFAULT_FALLBACK_CHECK_INTERVAL_CALCULATOR = 15  # 15 seconds - for Calculator devices (fast detector updates)
 DEBOUNCE_DELAY = 0.2  # seconds - it groups all changes within this time period (due to better performance)
+CALCULATION_DEBOUNCE_DELAY = 2.0  # seconds - delay for window calculations after config changes (prevents multiple recalculations during value adjustments)

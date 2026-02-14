@@ -91,6 +91,9 @@
       "data_count": {
         "name": "Data Count"
       },
+      "error_code": {
+        "name": "Error Code"
+      },
       "current_price": {
         "name": "Current Price"
       },

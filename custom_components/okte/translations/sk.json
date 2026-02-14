@@ -91,6 +91,9 @@
       "data_count": {
         "name": "Počet záznamov"
       },
+      "error_code": {
+        "name": "Chybový kód"
+      },
       "current_price": {
         "name": "Aktuálna cena"
       },

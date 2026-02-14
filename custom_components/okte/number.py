@@ -81,14 +81,18 @@ class OkteNumberEntity(NumberEntity):
         self.entity_id = f"number.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
         self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{entity_id}"
         
-        # Set initial value from instance or default
-        if hasattr(instance, 'number_values') and entity_id in instance.number_values:
-            self._attr_native_value = instance.number_values[entity_id]
-        else:
-            self._attr_native_value = 3  # Default 3 hours
+        # Load value from config_entry.options (persistent storage)
+        self._attr_native_value = config_entry.options.get(entity_id, 3)  # Default 3 hours
+        
+        # Also update instance value for calculations
+        if not hasattr(instance, 'number_values'):
+            instance.number_values = {}
+        instance.number_values[entity_id] = self._attr_native_value
     
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        
         # Listen for updates
         self.async_on_remove(
             async_dispatcher_connect(
@@ -125,15 +129,28 @@ class OkteNumberEntity(NumberEntity):
     
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        self._attr_native_value = int(value)
+        int_value = int(value)
+        self._attr_native_value = int_value
         
-        # Store in instance
+        # Store in instance for calculations
         if not hasattr(self.instance, 'number_values'):
             self.instance.number_values = {}
-        self.instance.number_values[self._entity_id_key] = int(value)
+        self.instance.number_values[self._entity_id_key] = int_value
         
-        # Trigger recalculation
-        await self.instance.my_controller()
+        # Store in config_entry.options for persistence
+        new_options = {**self.config_entry.options}
+        new_options[self._entity_id_key] = int_value
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options=new_options
+        )
+        
+        # Trigger recalculation with debounce (prevents multiple rapid recalculations)
+        if hasattr(self.instance, 'schedule_calculation'):
+            self.instance.schedule_calculation()
+        else:
+            # Fallback if schedule_calculation not available
+            await self.instance.my_controller()
     
     @property
     def unique_id(self) -> str:
