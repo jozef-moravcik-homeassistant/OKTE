@@ -174,7 +174,7 @@ Master zariadenie vytvára nasledujúce entity:
 - `period_data`: Pole objektov obsahujúce:
   - `time`: ISO časová pečiatka
   - `price`: Hodnota ceny v EUR/MWh
-  - `hour`: Hodina dňa (0-23)
+  - `period`: Perióda dňa
 
 #### 📋 Senzory HTML tabuliek
 
