@@ -130,7 +130,7 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 
 ## 📡 OKTE Master zariadenie
 
-**OKTE Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
+**OKTE Master** zariadenie je jadro integrácie, ktorá zabezpečuje celú komunikáciu s OKTE API. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
 
 ### Konfigurácia Master zariadenia
 
