@@ -174,7 +174,7 @@ The Master device creates the following entities:
 - `period_data`: Array of objects containing:
   - `time`: ISO timestamp
   - `price`: Price value in EUR/MWh
-  - `hour`: Hour of the day (0-23)
+  - `period`: period of the day
 
 #### 📋 HTML Table Sensors
 
@@ -185,7 +185,7 @@ The Master device creates the following entities:
 
 **Attributes:**
 - `html_table`: Complete HTML table code with:
-  - Hourly breakdown (00:00 - 23:59)
+  - Periodical breakdown (00:00 - 23:59)
   - Color-coded prices (green=low, yellow=medium, red=high)
   - Formatted prices with 2 decimal places
 
@@ -698,7 +698,7 @@ cards:
   - 🟢 **Green**: Low prices (good for energy consumption)
   - 🟡 **Yellow**: Medium prices
   - 🔴 **Red**: High prices (reduce consumption)
-- 🕐 **Hourly breakdown** from 00:00 to 23:59
+- 🕐 **Periodical breakdown** from 00:00 to 23:59
 - 💰 **Formatted prices** with 2 decimal places
 - 📱 **Responsive design** adapts to screen size
 
