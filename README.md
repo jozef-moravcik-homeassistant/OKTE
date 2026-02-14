@@ -143,7 +143,7 @@ The **OKTE Master** device is the core component that handles all communication 
 | **Add 'OKTE -' prefix to entity names** | ✅ Enabled | Adds "okte_" prefix to all entity IDs |
 | **Daily fetch time** | 14:00 | Time when data is automatically downloaded from OKTE API |
 
-> ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days.
+> ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. Data is also automatically downloaded at 10, 60 and 120 seconds after midnight to update the data for the current day, but since in OKTE the data for the next day is only available after 13:00, with this midnight download only the current day is loaded, the next day only with the next download (default 14:00). In case of unsuccessful data download, for example due to an interrupted internet connection or a malfunction on the OKTE side, the integration will try to download the data every minute until it is successfully downloaded. This status is indicated by the sensor.okte_connection_status sensor and the error code is recorded in the sensor.okte_error_code sensor.
 
 ### Master Device Entities
 
@@ -167,8 +167,8 @@ The Master device creates the following entities:
 
 | Entity ID | Description | Purpose |
 |-----------|-------------|---------|
-| `sensor.okte_prices_today` | Today's hourly prices | **For ApexCharts graphs** |
-| `sensor.okte_prices_tomorrow` | Tomorrow's hourly prices | **For ApexCharts graphs** |
+| `sensor.okte_prices_today` | Today's prices | **For ApexCharts graphs** |
+| `sensor.okte_prices_tomorrow` | Tomorrow's prices | **For ApexCharts graphs** |
 
 **Attributes:**
 - `period_data`: Array of objects containing:
@@ -227,6 +227,7 @@ cards:
       - entity: sensor.okte_html_table_today
       - entity: sensor.okte_html_table_tomorrow
       - type: divider
+      - entity: sensor.okte_error_code sensor
       - entity: sensor.okte_data_count
       - entity: sensor.okte_connection_status
       - entity: sensor.okte_last_update
