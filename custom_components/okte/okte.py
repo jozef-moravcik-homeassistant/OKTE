@@ -790,21 +790,26 @@ class OKTE_Master_Instance:
             
             data = self.price_data['all_data']
             current_local_time = self._get_current_local_time()
-            current_hour = current_local_time.replace(minute=0, second=0, microsecond=0)
             
-            # Find current price record
+            # Find current price record - match 15-minute intervals
             current_record = None
             for record in data:
                 try:
                     delivery_start = record.get('deliveryStart')
-                    if not delivery_start:
+                    delivery_end = record.get('deliveryEnd')
+                    if not delivery_start or not delivery_end:
                         continue
                     
-                    # Parse UTC time and convert to local
+                    # Parse UTC times and convert to local
                     if delivery_start.endswith('Z'):
                         utc_start = datetime.fromisoformat(delivery_start.replace('Z', '+00:00'))
                     else:
                         utc_start = datetime.fromisoformat(delivery_start)
+                    
+                    if delivery_end.endswith('Z'):
+                        utc_end = datetime.fromisoformat(delivery_end.replace('Z', '+00:00'))
+                    else:
+                        utc_end = datetime.fromisoformat(delivery_end)
                     
                     # Convert to local timezone
                     try:
@@ -812,14 +817,15 @@ class OKTE_Master_Instance:
                         ha_timezone = self.hass.config.time_zone
                         tz = zoneinfo.ZoneInfo(ha_timezone)
                         local_start = utc_start.astimezone(tz)
+                        local_end = utc_end.astimezone(tz)
                     except (ImportError, Exception):
                         local_start = utc_start + timedelta(hours=1)
+                        local_end = utc_end + timedelta(hours=1)
                     
-                    # Compare hours
-                    local_start_hour = local_start.replace(minute=0, second=0, microsecond=0)
-                    if local_start_hour == current_hour:
+                    # Check if current time is within the 15-minute interval
+                    if local_start <= current_local_time < local_end:
                         current_record = record
-                        LOGGER.debug(f"Current price updated: {record['price']} EUR/MWh for {local_start.strftime('%H:%M')}")
+                        LOGGER.debug(f"Current price updated: {record['price']} EUR/MWh for {local_start.strftime('%H:%M')}-{local_end.strftime('%H:%M')}")
                         break
                 except Exception as e:
                     continue
@@ -1593,10 +1599,8 @@ class OKTE_Window_Instance:
             ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW: None,
             ENTITY_DETECTOR_LOWEST_PRICE: False,
             ENTITY_DETECTOR_LOWEST_PRICE_TODAY: False,
-            ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW: False,
             ENTITY_DETECTOR_HIGHEST_PRICE: False,
             ENTITY_DETECTOR_HIGHEST_PRICE_TODAY: False,
-            ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW: False,
         }
         
         # Storage for sensor attributes
@@ -1619,10 +1623,8 @@ class OKTE_Window_Instance:
         self.SENSOR_ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW = None
         self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE = None
         self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE_TODAY = None
-        self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW = None
         self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE = None
         self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE_TODAY = None
-        self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW = None
 
     def setup_entity_ids(self):
         """Setup entity IDs after entry_id is set."""
@@ -1641,10 +1643,8 @@ class OKTE_Window_Instance:
             self.SENSOR_ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW = f"sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW}"
             self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_LOWEST_PRICE}"
             self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE_TODAY = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_LOWEST_PRICE_TODAY}"
-            self.BINARY_SENSOR_ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW}"
             self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_HIGHEST_PRICE}"
             self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE_TODAY = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_HIGHEST_PRICE_TODAY}"
-            self.BINARY_SENSOR_ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW}"
     
     def _get_current_local_time(self):
         """Get current time in Home Assistant's timezone."""
@@ -1783,10 +1783,8 @@ class OKTE_Window_Instance:
                 self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW] = None
                 self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TODAY] = False
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
                 
                 # Send update signal to reflect unavailable state
                 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -1805,10 +1803,8 @@ class OKTE_Window_Instance:
                 self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW] = None
                 self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TODAY] = False
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
                 
                 # Send update signal to reflect unavailable state
                 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -1983,52 +1979,6 @@ class OKTE_Window_Instance:
             else:
                 self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
             
-            # Check if current time is within lowest price window tomorrow
-            if lowest_tomorrow['found']:
-                try:
-                    utc_start = datetime.fromisoformat(lowest_tomorrow['start_time'].replace('Z', '+00:00'))
-                    utc_end = datetime.fromisoformat(lowest_tomorrow['end_time'].replace('Z', '+00:00'))
-                    
-                    try:
-                        import zoneinfo
-                        ha_timezone = self.hass.config.time_zone
-                        tz = zoneinfo.ZoneInfo(ha_timezone)
-                        local_start = utc_start.astimezone(tz)
-                        local_end = utc_end.astimezone(tz)
-                    except ImportError:
-                        local_start = utc_start + timedelta(hours=1)
-                        local_end = utc_end + timedelta(hours=1)
-                    
-                    self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = local_start <= current_local_time < local_end
-                except Exception as e:
-                    LOGGER.debug(f"Error checking lowest price window tomorrow: {e}")
-                    self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = False
-            else:
-                self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = False
-            
-            # Check if current time is within highest price window tomorrow
-            if highest_tomorrow['found']:
-                try:
-                    utc_start = datetime.fromisoformat(highest_tomorrow['start_time'].replace('Z', '+00:00'))
-                    utc_end = datetime.fromisoformat(highest_tomorrow['end_time'].replace('Z', '+00:00'))
-                    
-                    try:
-                        import zoneinfo
-                        ha_timezone = self.hass.config.time_zone
-                        tz = zoneinfo.ZoneInfo(ha_timezone)
-                        local_start = utc_start.astimezone(tz)
-                        local_end = utc_end.astimezone(tz)
-                    except ImportError:
-                        local_start = utc_start + timedelta(hours=1)
-                        local_end = utc_end + timedelta(hours=1)
-                    
-                    self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = local_start <= current_local_time < local_end
-                except Exception as e:
-                    LOGGER.debug(f"Error checking highest price window tomorrow: {e}")
-                    self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
-            else:
-                self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
-            
             # Update general sensors (without today/tomorrow) - use cross-day windows
             # These search from today time_from to tomorrow time_to
             
@@ -2107,10 +2057,8 @@ class OKTE_Window_Instance:
             self.sensor_states[ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW] = None
             self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE] = False
             self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TODAY] = False
-            self.sensor_states[ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW] = False
             self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE] = False
             self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TODAY] = False
-            self.sensor_states[ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW] = False
             
             # Send update signal even on error to reflect unavailable state
             from homeassistant.helpers.dispatcher import async_dispatcher_send

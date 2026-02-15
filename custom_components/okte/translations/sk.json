@@ -170,17 +170,11 @@
       "detector_lowest_price_today": {
         "name": "Detektor najnižšej ceny dnes"
       },
-      "detector_lowest_price_tomorrow": {
-        "name": "Detektor najnižšej ceny zajtra"
-      },
       "detector_highest_price": {
         "name": "Detektor najvyššej ceny"
       },
       "detector_highest_price_today": {
         "name": "Detektor najvyššej ceny dnes"
-      },
-      "detector_highest_price_tomorrow": {
-        "name": "Detektor najvyššej ceny zajtra"
       }
     }
   },

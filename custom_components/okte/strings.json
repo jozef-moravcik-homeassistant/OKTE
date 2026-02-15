@@ -167,17 +167,11 @@
       "detector_lowest_price_today": {
         "name": "Detector Lowest Price Today"
       },
-      "detector_lowest_price_tomorrow": {
-        "name": "Detector Lowest Price Tomorrow"
-      },
       "detector_highest_price": {
         "name": "Detector Highest Price"
       },
       "detector_highest_price_today": {
         "name": "Detector Highest Price Today"
-      },
-      "detector_highest_price_tomorrow": {
-        "name": "Detector Highest Price Tomorrow"
       }
     }
   },

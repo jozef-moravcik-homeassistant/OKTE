@@ -890,7 +890,7 @@ class SensorEntityDefinition(SensorEntity):
         elif self._entity_id in [ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW]:
             return self._attr_native_value
         
-        # For window sensors - return STATE_ON/STATE_OFF based on whether window was found
+        # For window sensors - return STATE_WINDOW_FOUND/STATE_WINDOW_NOT_FOUND based on whether window was found
         elif self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
                                   ENTITY_HIGHEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
             if hasattr(self, '_window_data') and self._window_data:
@@ -898,11 +898,11 @@ class SensorEntityDefinition(SensorEntity):
                     import json
                     data = json.loads(self._window_data)
                     if data.get('found'):
-                        return STATE_ON
-                    return STATE_OFF
+                        return STATE_WINDOW_FOUND
+                    return STATE_WINDOW_NOT_FOUND
                 except:
-                    return STATE_OFF
-            return STATE_OFF
+                    return STATE_WINDOW_NOT_FOUND
+            return STATE_WINDOW_NOT_FOUND
         
         # Duration sensors - window size in H:MM format (periods * 15 minutes)
         elif self._entity_id == ENTITY_LOWEST_WINDOW_SIZE_TIME:

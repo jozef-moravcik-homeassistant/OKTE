@@ -8,6 +8,10 @@
 
 from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNKNOWN, STATE_UNAVAILABLE, STATE_OK, STATE_PROBLEM
 
+# Custom states for window sensors
+STATE_WINDOW_FOUND = "OK"
+STATE_WINDOW_NOT_FOUND = "NOT"
+
 DOMAIN = "okte"
 VERSION = "1.01.01"
 DOCUMENTATION_URL = "https://github.com/jozef-moravcik-homeassistant/okte"
@@ -167,10 +171,8 @@ ENTITY_HIGHEST_PRICE_WINDOW_TODAY = "highest_price_window_today"
 ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW = "highest_price_window_tomorrow"
 ENTITY_DETECTOR_LOWEST_PRICE = "detector_lowest_price"
 ENTITY_DETECTOR_LOWEST_PRICE_TODAY = "detector_lowest_price_today"
-ENTITY_DETECTOR_LOWEST_PRICE_TOMORROW = "detector_lowest_price_tomorrow"
 ENTITY_DETECTOR_HIGHEST_PRICE = "detector_highest_price"
 ENTITY_DETECTOR_HIGHEST_PRICE_TODAY = "detector_highest_price_today"
-ENTITY_DETECTOR_HIGHEST_PRICE_TOMORROW = "detector_highest_price_tomorrow"
 
 # Window Device - Duration Sensors (showing time in H:MM format)
 # These sensors display the same data as number entities but in time format
