@@ -306,14 +306,12 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_lowest_price` | ON keď je v okne najnižšej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_lowest_price_today` | ON keď je v dnešnom okne najnižšej ceny | ON / OFF |
-| `binary_sensor.okte_N_detector_lowest_price_tomorrow` | ON keď je v zajtrajšom okne najnižšej ceny | ON / OFF |
 
 **Detektory najvyššej ceny:**
 | Vzor ID entity | Popis | Stavy |
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_highest_price` | ON keď je v okne najvyššej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_highest_price_today` | ON keď je v dnešnom okne najvyššej ceny | ON / OFF |
-| `binary_sensor.okte_N_detector_highest_price_tomorrow` | ON keď je v zajtrajšom okne najvyššej ceny | ON / OFF |
 
 > 💡 **Použitie:** Ideálne pre spúšťače automatizácií! Zapnite nabíjanie batérie keď je detektor ON, alebo znížte spotrebu počas období vysokých cien.
 
@@ -355,7 +353,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_lowest_price
       - entity: binary_sensor.okte_1_detector_lowest_price_today
-      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
       - entity: sensor.okte_1_lowest_price_window
       - entity: sensor.okte_1_lowest_price_window_today
       - entity: sensor.okte_1_lowest_price_window_tomorrow
@@ -384,7 +381,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_highest_price
       - entity: binary_sensor.okte_1_detector_highest_price_today
-      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
       - entity: sensor.okte_1_highest_price_window
       - entity: sensor.okte_1_highest_price_window_today
       - entity: sensor.okte_1_highest_price_window_tomorrow
