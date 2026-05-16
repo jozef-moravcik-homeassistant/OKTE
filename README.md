@@ -306,12 +306,14 @@ These detectors automatically turn **ON** when the current time is within the ca
 |-------------------|-------------|--------|
 | `binary_sensor.okte_N_detector_lowest_price` | ON when in lowest price window (combined) | ON / OFF |
 | `binary_sensor.okte_N_detector_lowest_price_today` | ON when in today's lowest price window | ON / OFF |
+| `binary_sensor.okte_N_detector_lowest_price_tomorrow` | ON when in tomorrow's lowest price window | ON / OFF |
 
 **Highest Price Detectors:**
 | Entity ID Pattern | Description | States |
 |-------------------|-------------|--------|
 | `binary_sensor.okte_N_detector_highest_price` | ON when in highest price window (combined) | ON / OFF |
 | `binary_sensor.okte_N_detector_highest_price_today` | ON when in today's highest price window | ON / OFF |
+| `binary_sensor.okte_N_detector_highest_price_tomorrow` | ON when in tomorrow's highest price window | ON / OFF |
 
 > 💡 **Use Case:** Perfect for automation triggers! Turn on battery charging when detector is ON, or reduce consumption during high price periods.
 
@@ -353,6 +355,7 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_lowest_price
       - entity: binary_sensor.okte_1_detector_lowest_price_today
+      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
       - entity: sensor.okte_1_lowest_price_window
       - entity: sensor.okte_1_lowest_price_window_today
       - entity: sensor.okte_1_lowest_price_window_tomorrow
@@ -381,6 +384,7 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_highest_price
       - entity: binary_sensor.okte_1_detector_highest_price_today
+      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
       - entity: sensor.okte_1_highest_price_window
       - entity: sensor.okte_1_highest_price_window_today
       - entity: sensor.okte_1_highest_price_window_tomorrow

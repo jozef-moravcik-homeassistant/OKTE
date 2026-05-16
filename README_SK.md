@@ -130,7 +130,7 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 
 ## 📡 OKTE Master zariadenie
 
-**OKTE Master** zariadenie je jadro integrácie, ktorá zabezpečuje celú komunikáciu s OKTE API. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
+**OKTE Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
 
 ### Konfigurácia Master zariadenia
 
@@ -143,7 +143,7 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 | **Pridať prefix 'OKTE -' k názvom entít** | ✅ Zapnuté | Pridá prefix "okte_" ku všetkým ID entít |
 | **Denný čas sťahovania** | 14:00 | Čas, kedy sa automaticky sťahujú údaje z OKTE API |
 
-> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje sa automaticky sťahujú aj 10, 60 a 120 sekúnd po polnoci, aby boli údaje updatované pre aktuálny deň, ale keďže v OKTE sú údaje na nasledujúci deň zverejnené až po 13:00, pri tomto polnočnom sťahovaní sa načíta len aktuálny deň, nasledujúci deň až pri ďalšom  sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code.
+> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje sa automaticky sťahujú aj 10, 60 a 120 sekúnd po polnoci, aby boli údaje updatované pre aktuálny deň, ale keďže v OKTE sú údaje na nasledujúci zvedejnené až po 13:00, pri tomto polnočnom sťahovaní sa načíta len aktuálny deň, nasledujúci deň až pri ďalšom  sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code.
 
 ### Entity Master zariadenia
 
@@ -306,12 +306,14 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_lowest_price` | ON keď je v okne najnižšej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_lowest_price_today` | ON keď je v dnešnom okne najnižšej ceny | ON / OFF |
+| `binary_sensor.okte_N_detector_lowest_price_tomorrow` | ON keď je v zajtrajšom okne najnižšej ceny | ON / OFF |
 
 **Detektory najvyššej ceny:**
 | Vzor ID entity | Popis | Stavy |
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_highest_price` | ON keď je v okne najvyššej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_highest_price_today` | ON keď je v dnešnom okne najvyššej ceny | ON / OFF |
+| `binary_sensor.okte_N_detector_highest_price_tomorrow` | ON keď je v zajtrajšom okne najvyššej ceny | ON / OFF |
 
 > 💡 **Použitie:** Ideálne pre spúšťače automatizácií! Zapnite nabíjanie batérie keď je detektor ON, alebo znížte spotrebu počas období vysokých cien.
 
@@ -353,6 +355,7 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_lowest_price
       - entity: binary_sensor.okte_1_detector_lowest_price_today
+      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
       - entity: sensor.okte_1_lowest_price_window
       - entity: sensor.okte_1_lowest_price_window_today
       - entity: sensor.okte_1_lowest_price_window_tomorrow
@@ -381,6 +384,7 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_highest_price
       - entity: binary_sensor.okte_1_detector_highest_price_today
+      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
       - entity: sensor.okte_1_highest_price_window
       - entity: sensor.okte_1_highest_price_window_today
       - entity: sensor.okte_1_highest_price_window_tomorrow
