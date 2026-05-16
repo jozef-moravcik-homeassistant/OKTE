@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/jozef-moravcik-homeassistant/okte/issues",
   "loggers": ["okte"],
   "requirements": [],
-  "version": "1.01.01"
+  "version": "1.01.02"
 }
