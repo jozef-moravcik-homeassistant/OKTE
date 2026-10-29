@@ -675,21 +675,81 @@ Nainštalujte **HTML Template Card** cez HACS:
 #### Tabuľka dnešných cien
 
 ```yaml
-type: grid
-cards:
-  - type: custom:html-template-card
-    content: |
-      {{ state_attr('sensor.okte_html_table_today', 'html_table') }}
+type: custom:html-template-card
+content: >-
+  {% set out %}
+  {% set d = state_attr('sensor.okte_prices_today', 'period_data') or [] %}
+  {% set mnp = state_attr('sensor.okte_prices_today', 'min_price') %}
+  {% set mxp = state_attr('sensor.okte_prices_today', 'max_price') %}
+  <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 400px; border-color: color-mix(in srgb, var(--primary-text-color, #000000) 35%, transparent); color: var(--primary-text-color, #000000);">
+  <thead>
+  <tr style="background-color: var(--primary-color, #4a90e2); color: var(--text-primary-color, #ffffff);"><th colspan="2" style="text-align: center; font-size: 16px; padding: 10px;">Dnešné ceny elektriky OKTE</th></tr>
+  <tr style="background-color: var(--secondary-background-color, #f2f2f2); color: var(--primary-text-color, #000000);"><th style="text-align: center; padding: 2px 7px;">Čas od - do</th><th style="text-align: center; padding: 2px 7px;">Cena [€/MWh]</th></tr>
+  </thead>
+  <tbody>
+  {% if d | count == 0 %}
+  <tr><td colspan="2" style="text-align: center; height: 200px; vertical-align: middle;">Údaje nie sú k dispozícii</td></tr>
+  {% else %}
+  {% for p in d %}
+  <tr style="background-color: {{ 'var(--card-background-color, #ffffff)' if loop.index0 % 2 == 0 else 'color-mix(in srgb, var(--primary-text-color, #000000) 6%, var(--card-background-color, #ffffff))' }};"><td style="text-align: center; padding: 1px 7px;">{{ p.period_start }} - {{ p.period_end }}</td><td style="text-align: right; color: {{ 'light-dark(#009000, #5fd35f)' if p.price > 20 else ('light-dark(#d08000, #ffb74d)' if p.price >= 0 else 'light-dark(#d00000, #ff6b6b)') }}; padding: 1px 7px;">{{ '%.2f' | format(p.price) }} €</td></tr>
+  {% endfor %}
+  {% endif %}
+  </tbody>
+  {% if d | count > 0 %}
+  {% set mn = d | selectattr('price', 'eq', mnp) | first %}
+  {% set mx = d | selectattr('price', 'eq', mxp) | first %}
+  {% set dr = state_attr('sensor.okte_prices_today', 'date_range').split('-') %}
+  <tfoot>
+  <tr style="background-color: color-mix(in srgb, var(--primary-color, #4a90e2) 12%, var(--card-background-color, #ffffff));"><td colspan="2" style="padding: 10px; font-size: 14px;">
+  <strong>📅 Dátum:</strong> {{ dr[2] }}.{{ dr[1] }}.{{ dr[0] }}<br>
+  <strong>📉 Min. cena:</strong> {{ '%.2f' | format(mnp) }} € ({{ mn.period_start }}-{{ mn.period_end }})<br>
+  <strong>📈 Max. cena:</strong> {{ '%.2f' | format(mxp) }} € ({{ mx.period_start }}-{{ mx.period_end }})<br>
+  <strong>📊 Priemerná cena:</strong> {{ '%.2f' | format(state_attr('sensor.okte_prices_today', 'avg_price')) }} €
+  </td></tr>
+  </tfoot>
+  {% endif %}
+  </table>
+  {% endset %}{{ out | replace('\n', '') | trim }}
 ```
 
 #### Tabuľka zajtrajších cien
 
 ```yaml
-type: grid
-cards:
-  - type: custom:html-template-card
-    content: |
-      {{ state_attr('sensor.okte_html_table_tomorrow', 'html_table') }}
+type: custom:html-template-card
+content: >-
+  {% set out %}
+  {% set d = state_attr('sensor.okte_prices_tomorrow', 'period_data') or [] %}
+  {% set mnp = state_attr('sensor.okte_prices_tomorrow', 'min_price') %}
+  {% set mxp = state_attr('sensor.okte_prices_tomorrow', 'max_price') %}
+  <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 400px; border-color: color-mix(in srgb, var(--primary-text-color, #000000) 35%, transparent); color: var(--primary-text-color, #000000);">
+  <thead>
+  <tr style="background-color: var(--primary-color, #4a90e2); color: var(--text-primary-color, #ffffff);"><th colspan="2" style="text-align: center; font-size: 16px; padding: 10px;">Zajtrajšie ceny elektriky OKTE</th></tr>
+  <tr style="background-color: var(--secondary-background-color, #f2f2f2); color: var(--primary-text-color, #000000);"><th style="text-align: center; padding: 2px 7px;">Čas od - do</th><th style="text-align: center; padding: 2px 7px;">Cena [€/MWh]</th></tr>
+  </thead>
+  <tbody>
+  {% if d | count == 0 %}
+  <tr><td colspan="2" style="text-align: center; height: 200px; vertical-align: middle;">Údaje nie sú k dispozícii</td></tr>
+  {% else %}
+  {% for p in d %}
+  <tr style="background-color: {{ 'var(--card-background-color, #ffffff)' if loop.index0 % 2 == 0 else 'color-mix(in srgb, var(--primary-text-color, #000000) 6%, var(--card-background-color, #ffffff))' }};"><td style="text-align: center; padding: 1px 7px;">{{ p.period_start }} - {{ p.period_end }}</td><td style="text-align: right; color: {{ 'light-dark(#009000, #5fd35f)' if p.price > 20 else ('light-dark(#d08000, #ffb74d)' if p.price >= 0 else 'light-dark(#d00000, #ff6b6b)') }}; padding: 1px 7px;">{{ '%.2f' | format(p.price) }} €</td></tr>
+  {% endfor %}
+  {% endif %}
+  </tbody>
+  {% if d | count > 0 %}
+  {% set mn = d | selectattr('price', 'eq', mnp) | first %}
+  {% set mx = d | selectattr('price', 'eq', mxp) | first %}
+  {% set dr = state_attr('sensor.okte_prices_tomorrow', 'date_range').split('-') %}
+  <tfoot>
+  <tr style="background-color: color-mix(in srgb, var(--primary-color, #4a90e2) 12%, var(--card-background-color, #ffffff));"><td colspan="2" style="padding: 10px; font-size: 14px;">
+  <strong>📅 Dátum:</strong> {{ dr[2] }}.{{ dr[1] }}.{{ dr[0] }}<br>
+  <strong>📉 Min. cena:</strong> {{ '%.2f' | format(mnp) }} € ({{ mn.period_start }}-{{ mn.period_end }})<br>
+  <strong>📈 Max. cena:</strong> {{ '%.2f' | format(mxp) }} € ({{ mx.period_start }}-{{ mx.period_end }})<br>
+  <strong>📊 Priemerná cena:</strong> {{ '%.2f' | format(state_attr('sensor.okte_prices_tomorrow', 'avg_price')) }} €
+  </td></tr>
+  </tfoot>
+  {% endif %}
+  </table>
+  {% endset %}{{ out | replace('\n', '') | trim }}
 ```
 
 ### Funkcie tabuliek
