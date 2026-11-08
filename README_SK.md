@@ -1,6 +1,6 @@
 # 🔌 OKTE - Integrácia slovenského trhu s elektrinou pre Home Assistant
 
-[![Verzia](https://img.shields.io/badge/verzia-1.01.01-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
+[![Verzia](https://img.shields.io/badge/verzia-1.01.03-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![Licencia](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
 
@@ -30,7 +30,7 @@
 ## 📑 Obsah
 
 1. [Inštalácia](#-inštalácia)
-   - [Cez HACS](#cez-hacs-odporúčané)
+   - [Cez Marketplace](#cez-hacs-odporúčané)
    - [Manuálna inštalácia](#manuálna-inštalácia)
    - [Konfigurácia zariadení](#konfigurácia-zariadení)
 2. [OKTE Master zariadenie](#-okte-master-zariadenie)
@@ -51,16 +51,17 @@
 
 ## 🔧 Inštalácia
 
-### Cez HACS (Odporúčané)
+### Cez Marketplace (Odporúčané)
 
-1. Otvorte **HACS** vo vašom Home Assistant
-2. Prejdite do **Integrácie**
-3. Kliknite na menu **3 bodky** v pravom hornom rohu
-4. Vyberte **Vlastné repozitáre**
-5. Pridajte URL repozitára: `https://github.com/jozef-moravcik-homeassistant/okte`
-6. Kategória: **Integrácia**
-7. Kliknite na **Stiahnuť**
-8. Reštartujte Home Assistant
+1. Otvorte **Marketplace** vo vašom Home Assistant
+2. Vyhľadajte **okte** a kliknite na tlačítko **Inštalovať**
+#### Ak nemôžete nájsť okte v Marketplace, pokračujte v nasledujúcich krokoch ####
+4. Kliknite na menu **3 bodky** v pravom hornom rohu
+5. Vyberte **Vlastné repozitáre**
+6. Pridajte URL repozitára: `https://github.com/jozef-moravcik-homeassistant/okte`
+7. Kategória: **Integrácia**
+8. Kliknite na **Stiahnuť**
+9. Reštartujte Home Assistant
 
 ### Manuálna inštalácia
 
@@ -91,9 +92,9 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 ![Konfigurácia OKTE Master](docs/images/sk_device_okte_master_configuration.jpg)
 
 #### 🔢 Calculator zariadenia
-- Pridajte **neobmedzený počet** Calculator zariadení
+- Môžete pridať **neobmedzený počet** Calculator zariadení
 - Každé Calculator zariadenie je **nezávisle nastaviteľné**
-- Automaticky číslované: Calculator 1, Calculator 2, Calculator 3, atď.
+- Kalkulátory sú automaticky číslované: Calculator 1, Calculator 2, Calculator 3, atď.
 - Využíva údaje z OKTE Master na vyhľadanie optimálnych cenových okien
 - Ideálne pre rôzne automatizačné scenáre (nabíjanie batérie, prevádzka tepelného čerpadla, atď.)
 
@@ -143,7 +144,7 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 | **Pridať prefix 'OKTE -' k názvom entít** | ✅ Zapnuté | Pridá prefix "okte_" ku všetkým ID entít |
 | **Denný čas sťahovania** | 14:00 | Čas, kedy sa automaticky sťahujú údaje z OKTE API |
 
-> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje sa automaticky sťahujú aj 10, 60 a 120 sekúnd po polnoci, aby boli údaje updatované pre aktuálny deň, ale keďže v OKTE sú údaje na nasledujúci zvedejnené až po 13:00, pri tomto polnočnom sťahovaní sa načíta len aktuálny deň, nasledujúci deň až pri ďalšom  sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code.
+> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje nasledujúceho dňa sa o pol noci automaticky presunú do aktuálneho dňa, preto nie je potrebné po pol noci údaje znovu sťahovať. Údaje nasledujúceho dňa sa doplnia až pri ďalšom sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code. Údaje zostávajú v systéme zapamätané aj po reštarte HA.
 
 ### Entity Master zariadenia
 
@@ -253,9 +254,6 @@ column_span: 2
 | Parameter | Predvolená hodnota | Popis |
 |-----------|-------------------|-------|
 | **Vložiť názov zariadenia pred názov entity** | ✅ Zapnuté | Pridá identifikátor zariadenia do názvov entít |
-| **Veľkosť okna** | 3 hodiny | Predvolená veľkosť pre výpočty cenových okien |
-| **Časové rozmedzie od** | 00:00 | Predvolený začiatočný čas pre vyhľadávanie okna |
-| **Časové rozmedzie do** | 23:59 | Predvolený koncový čas pre vyhľadávanie okna |
 
 ### Entity Calculator zariadenia
 
@@ -323,16 +321,20 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 | Vzor ID entity | Typ | Popis | Predvolené |
 |----------------|------|-------|------------|
 | `switch.okte_N_lowest_price_window_from_as_day_start` | Switch | Automaticky nastaviť začiatočný čas na východ slnka | OFF |
-| `time.okte_N_lowest_price_time_from` | Time | Manuálny začiatočný čas | 00:00 |
+| `time.okte_N_lowest_price_window_from_as_day_start_prefix` | Time | Oneskorenie začiatku vyhľadávacieho okna po východe slnka | 00:00 |
+| `time.okte_N_lowest_price_time_from` | Time | Začiatok vyhľadávacieho okna | 00:00 |
 | `switch.okte_N_lowest_price_window_to_as_day_end` | Switch | Automaticky nastaviť koncový čas na západ slnka | OFF |
-| `time.okte_N_lowest_price_time_to` | Time | Manuálny koncový čas | 23:59 |
+| `time.okte_N_lowest_price_window_to_as_day_end_prefix` | Time | Skrátenie konca vyhľadávacieho okna pred západom slnka | 00:00 |
+| `time.okte_N_lowest_price_time_to` | Time | Koniec vyhľadávacieho okna | 23:59 |
 | `number.okte_N_lowest_price_window_size` | Number | Trvanie cenového okna (hodiny) | 3 |
 
 **Ako fungujú prepínače východu/západu slnka:**
 - ✅ **ON**: Čas je automaticky nastavený na východ/západ slnka
-- ⬜ **OFF**: Použije sa manuálny čas z entity `time`
-
-> 🌅 **Príklad:** Zapnite prepínač východu slnka pre automatické vyhľadávanie najnižších cien od východu slnka každý deň
+- ak je nastavené oneskorenie po východe slnka (napríklad 2:00), tak čas východu slnka (napríklad 6:30) sa pripočíta k tomuto času, výsledkom bude, že vyhľadávacie okno za začína neskór (v našom príklade až o 8:30).
+- ak je nastavený čas skrátenia vyhľadávacieho okna pred západom slnka (napríklad 2:00), a západ slnka je napríklad o 17:30, tak koniec vyhľadávacieho okna bude o 15:30.
+- oneskorenie začiatku a skrátenie konca vyhľadávacieho okna je praktické hlavne pre plánovanie prevádzky veľkých spotrebičov, ako napríklad tepeľné čerpadlo, lebo po východe slnka je potrebný nejaký čas, až výkon z FV bude dostatočný pre prevádzku tepeľného čerpadla.
+   
+- ⬜ **OFF**: Čas začiatku a konca vyhľadávacieho okna sa zadáva manuálne
 
 #### ⚙️ Ovládacie entity - okno najvyššej ceny
 
@@ -340,8 +342,10 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 | Vzor ID entity | Typ | Popis | Predvolené |
 |----------------|------|-------|------------|
 | `switch.okte_N_highest_price_window_from_as_day_start` | Switch | Automaticky nastaviť začiatočný čas na východ slnka | OFF |
+| `time.okte_N_highest_price_window_from_as_day_start_prefix` | Time | Oneskorenie začiatku vyhľadávacieho okna po východe slnka | 00:00 |
 | `time.okte_N_highest_price_time_from` | Time | Manuálny začiatočný čas | 00:00 |
 | `switch.okte_N_highest_price_window_to_as_day_end` | Switch | Automaticky nastaviť koncový čas na západ slnka | OFF |
+| `time.okte_N_highest_price_window_to_as_day_end_prefix` | Time | Skrátenie konca vyhľadávacieho okna pred západom slnka | 00:00 |
 | `time.okte_N_highest_price_time_to` | Time | Manuálny koncový čas | 23:59 |
 | `number.okte_N_highest_price_window_size` | Number | Trvanie cenového okna (hodiny) | 3 |
 
@@ -355,7 +359,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_lowest_price
       - entity: binary_sensor.okte_1_detector_lowest_price_today
-      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
       - entity: sensor.okte_1_lowest_price_window
       - entity: sensor.okte_1_lowest_price_window_today
       - entity: sensor.okte_1_lowest_price_window_tomorrow
@@ -370,8 +373,10 @@ cards:
   - type: entities
     entities:
       - entity: switch.okte_1_lowest_price_window_from_as_day_start
+      - entity: time.okte_1_lowest_price_window_from_as_day_start_prefix
       - entity: time.okte_1_lowest_price_time_from
       - entity: switch.okte_1_lowest_price_window_to_as_day_end
+      - entity: time.okte_1_lowest_price_window_to_as_day_end_prefix
       - entity: time.okte_1_lowest_price_time_to
       - entity: number.okte_1_lowest_price_window_size
     title: Najnižšia cena - Nastavenia
@@ -384,7 +389,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_highest_price
       - entity: binary_sensor.okte_1_detector_highest_price_today
-      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
       - entity: sensor.okte_1_highest_price_window
       - entity: sensor.okte_1_highest_price_window_today
       - entity: sensor.okte_1_highest_price_window_tomorrow
@@ -399,8 +403,10 @@ cards:
   - type: entities
     entities:
       - entity: switch.okte_1_highest_price_window_from_as_day_start
+      - entity: time.okte_1_highest_price_window_from_as_day_start_prefix
       - entity: time.okte_1_highest_price_time_from
       - entity: switch.okte_1_highest_price_window_to_as_day_end
+      - entity: time.okte_1_highest_price_window_to_as_day_end_prefix
       - entity: time.okte_1_highest_price_time_to
       - entity: number.okte_1_highest_price_window_size
     title: Najvyššia cena - Nastavenia
@@ -436,10 +442,10 @@ recorder:
 
 | Entita | Veľkosť údajov | Dôvod |
 |--------|----------------|-------|
-| `sensor.okte_prices_today` | ~16 KB | Obsahuje 24-48 hodín detailných cenových údajov |
-| `sensor.okte_prices_tomorrow` | ~16 KB | Obsahuje 24-48 hodín detailných cenových údajov |
-| `sensor.okte_html_table_today` | ~8 KB | Kompletná HTML tabuľka so štýlmi |
-| `sensor.okte_html_table_tomorrow` | ~8 KB | Kompletná HTML tabuľka so štýlmi |
+| `sensor.okte_prices_today` | ~64 KB | Obsahuje 24-48 hodín detailných cenových údajov |
+| `sensor.okte_prices_tomorrow` | ~64 KB | Obsahuje 24-48 hodín detailných cenových údajov |
+| `sensor.okte_html_table_today` | ~32 KB | Kompletná HTML tabuľka so štýlmi |
+| `sensor.okte_html_table_tomorrow` | ~32 KB | Kompletná HTML tabuľka so štýlmi |
 
 ### Upozornenie na konfiguráciu
 
@@ -449,7 +455,7 @@ Po inštalácii integrácia zobrazí **systémové upozornenie** odporúčajúce
 
 ![Nastavenia vylúčenia Recorder](docs/images/sk_settings_recorder_exclude_entities.jpg)
 
-> 💡 **Poznámka:** Tieto entity budú stále perfektne fungovať vo vašich dashboardoch a automatizáciách - jednoducho sa nebudú ukladať do historických databázových záznamov.
+> 💡 **Poznámka:** Tieto entity budú stále fungovať vo vašich dashboardoch a automatizáciách - jednoducho sa len nebudú ukladať do historických databázových záznamov.
 
 ---
 
@@ -930,44 +936,6 @@ automation:
 
 ---
 
-## 🔧 Riešenie problémov
-
-### Integrácia sa nenačíta
-
-1. **Skontrolujte logy** v Nastavenia → Systém → Logy
-2. **Overte inštaláciu** - súbory by mali byť v `custom_components/okte/`
-3. **Reštartujte Home Assistant** po inštalácii
-4. **Vymažte cache prehliadača** ak UI nezobrazuje integráciu
-
-### Žiadne údaje / Nedostupné senzory
-
-1. **Skontrolujte OKTE Master pripojenie**: Overte, že `sensor.okte_connection_status` je "Pripojené"
-2. **Manuálne spustite stiahnutie údajov**: Stlačte `button.okte_update_data`
-3. **Overte čas sťahovania**: Uistite sa, že je po 13:00, keď OKTE zverejňuje ceny
-4. **Skontrolujte dostupnosť API**: OKTE API môže byť dočasne nedostupné
-
-### Okno Calculator sa neaktualizuje
-
-1. **Overte nastavenia časového rozsahu** v konfigurácii Calculator
-2. **Skontrolujte veľkosť okna** - uistite sa, že nie je väčšia ako vyhľadávací rozsah
-3. **Overte OKTE Master** má platné údaje
-4. **Skontrolujte prepínače východu/západu slnka** - môžu prepísať manuálne časy
-
-### Problémy s výkonom databázy
-
-1. **Implementujte vylúčenia recordera** ako je popísané v [Optimalizácia databázy](#-optimalizácia-databázy)
-2. **Reštartujte Home Assistant** po pridaní vylúčení
-3. **Vyčistite staré údaje**: Developer Tools → Services → `recorder.purge`
-
-### Grafy sa nezobrazujú
-
-1. **Nainštalujte ApexCharts Card** cez HACS
-2. **Vymažte cache prehliadača**
-3. **Skontrolujte ID entít** v konfigurácii karty zodpovedajú názvom vašich zariadení
-4. **Overte údaje senzora**: Skontrolujte, či `sensor.okte_prices_today` má atribút `period_data`
-
----
-
 ## 💬 Podpora
 
 ### 📧 Kontakt & Odkazy
@@ -986,7 +954,7 @@ Pri hlásení problémov prosím uveďte:
 4. Kroky na reprodukciu problému
 5. Snímky obrazovky, ak je to možné
 
-### ⭐ Ukážte svoju podporu
+### ⭐ Podporte ma
 
 Ak považujete túto integráciu za užitočnú, zvážte prosím:
 - ⭐ **Označte repozitár hviezdičkou** na GitHub
