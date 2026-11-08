@@ -29,6 +29,12 @@ from .const import (
     ENTITY_LOWEST_AUTO_TIME_TO,
     ENTITY_HIGHEST_AUTO_TIME_FROM,
     ENTITY_HIGHEST_AUTO_TIME_TO,
+    ENTITY_LOWEST_AUTO_TIME_FROM_PREFIX,
+    ENTITY_LOWEST_AUTO_TIME_TO_PREFIX,
+    ENTITY_HIGHEST_AUTO_TIME_FROM_PREFIX,
+    ENTITY_HIGHEST_AUTO_TIME_TO_PREFIX,
+    AUTO_TIME_PREFIX_KEYS,
+    apply_sun_prefix,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -52,16 +58,24 @@ async def async_setup_entry(
     
     LOGGER.info("Proceeding to create time entities - device_type is Calculator")
     
-    # Get instance from hass.data
-    instance = hass.data[DOMAIN][config_entry.entry_id]["instance"]
+    # Get instance from runtime data
+    instance = config_entry.runtime_data.instance
     LOGGER.info(f"Got instance: {type(instance).__name__}")
+    
+    # Load translations (entity names are stored in translation files)
+    from .sensor import _load_translations
+    translations = await _load_translations(hass)
     
     # Create time entities for Calculator device
     time_entities = [
-        OkteTimeEntity(hass, config_entry, instance, ENTITY_LOWEST_TIME_FROM),
-        OkteTimeEntity(hass, config_entry, instance, ENTITY_LOWEST_TIME_TO),
-        OkteTimeEntity(hass, config_entry, instance, ENTITY_HIGHEST_TIME_FROM),
-        OkteTimeEntity(hass, config_entry, instance, ENTITY_HIGHEST_TIME_TO),
+        OkteTimeEntity(hass, config_entry, instance, ENTITY_LOWEST_TIME_FROM, translations),
+        OkteTimeEntity(hass, config_entry, instance, ENTITY_LOWEST_TIME_TO, translations),
+        OkteTimeEntity(hass, config_entry, instance, ENTITY_HIGHEST_TIME_FROM, translations),
+        OkteTimeEntity(hass, config_entry, instance, ENTITY_HIGHEST_TIME_TO, translations),
+        OkteTimePrefixEntity(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_FROM_PREFIX, translations),
+        OkteTimePrefixEntity(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_TO_PREFIX, translations),
+        OkteTimePrefixEntity(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_FROM_PREFIX, translations),
+        OkteTimePrefixEntity(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_TO_PREFIX, translations),
     ]
     
     LOGGER.info(f"Creating time entities for Calculator device")
@@ -74,8 +88,9 @@ async def async_setup_entry(
 class OkteTimeEntity(TimeEntity):
     """Time entity for time range settings (HH:MM format)."""
     
-    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str):
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str, translations: dict | None = None):
         """Initialize the time entity."""
+        self._translations = translations or {}
         self.hass = hass
         self.config_entry = config_entry
         self.instance = instance
@@ -113,6 +128,19 @@ class OkteTimeEntity(TimeEntity):
                 self.hass,
                 f"{DOMAIN}_time_update_{self.config_entry.entry_id}",
                 self._handle_update
+            )
+        )
+        
+        # Listen for prefix changes (recalculate auto time if its switch is ON)
+        @callback
+        def prefix_changed():
+            self.hass.async_create_task(self._handle_sun_change())
+        
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{DOMAIN}_prefix_update_{self.config_entry.entry_id}",
+                prefix_changed
             )
         )
         
@@ -204,6 +232,13 @@ class OkteTimeEntity(TimeEntity):
         from datetime import time as dt_time
         sun_time_raw = sun_time.time()
         time_value = dt_time(sun_time_raw.hour, sun_time_raw.minute)
+        
+        # Apply prefix (day start + prefix / day end - prefix)
+        time_value = apply_sun_prefix(
+            time_value,
+            self.instance.time_values.get(AUTO_TIME_PREFIX_KEYS.get(self._entity_id_key)),
+            is_sunrise,
+        )
         
         # Update value
         old_value = self._attr_native_value
@@ -336,21 +371,15 @@ class OkteTimeEntity(TimeEntity):
     @property
     def name(self) -> str:
         """Return the name - dynamically generated with device prefix."""
-        # Base names
-        names = {
-            ENTITY_LOWEST_TIME_FROM: "Najnižšie ceny - Časový rozsah od",
-            ENTITY_LOWEST_TIME_TO: "Najnižšie ceny - Časový rozsah do",
-            ENTITY_HIGHEST_TIME_FROM: "Najvyššie ceny - Časový rozsah od",
-            ENTITY_HIGHEST_TIME_TO: "Najvyššie ceny - Časový rozsah do",
-        }
-        translated_name = names.get(self._entity_id_key, self._entity_id_key)
+        translated_name = (
+            self._translations.get("entity", {}).get("time", {}).get(self._entity_id_key, {}).get("name")
+            or self._entity_id_key
+        )
         
         # Apply prefix based on checkbox setting
         if self.instance.settings.include_device_name_in_entity:
             # Calculator: "OKTE - {device_label} - {translated_name}"
-            from homeassistant.helpers import device_registry as dr
-            device_registry = dr.async_get(self.hass)
-            device_entry = device_registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+            device_entry = self.device_entry
             
             if device_entry and device_entry.name_by_user:
                 device_label = device_entry.name_by_user
@@ -397,3 +426,51 @@ class OkteTimeEntity(TimeEntity):
                         attrs["controlled_by"] = "sunset"
         
         return attrs
+
+
+class OkteTimePrefixEntity(OkteTimeEntity):
+    """Time entity with prefix for auto day start/end (HH:MM).
+
+    FROM prefix is added to the day start (sunrise),
+    TO prefix is subtracted from the day end (sunset).
+    """
+    
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str, translations: dict | None = None):
+        """Initialize the prefix time entity."""
+        super().__init__(hass, config_entry, instance, entity_id, translations)
+        if not (hasattr(instance, 'time_values') and entity_id in instance.time_values):
+            self._attr_native_value = dt_time(0, 0)
+    
+    async def async_set_value(self, value: dt_time) -> None:
+        """Update the prefix value."""
+        clean_value = dt_time(value.hour, value.minute)
+        self._attr_native_value = clean_value
+        
+        if not hasattr(self.instance, 'time_values'):
+            self.instance.time_values = {}
+        self.instance.time_values[self._entity_id_key] = clean_value
+        
+        # Store in config_entry.options for persistence (as string "HH:MM")
+        new_options = {**self.config_entry.options}
+        new_options[self._entity_id_key] = clean_value.strftime("%H:%M")
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options=new_options
+        )
+        
+        # Recalculate the related time entity (only does something if its auto switch is ON)
+        async_dispatcher_send(self.hass, f"{DOMAIN}_prefix_update_{self.config_entry.entry_id}")
+        
+        self.async_write_ha_state()
+    
+    @property
+    def icon(self) -> str:
+        """Return icon."""
+        if self._entity_id_key in (ENTITY_LOWEST_AUTO_TIME_FROM_PREFIX, ENTITY_HIGHEST_AUTO_TIME_FROM_PREFIX):
+            return "mdi:timer-plus-outline"
+        return "mdi:timer-minus-outline"
+    
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """No extra attributes for prefix entities."""
+        return {}

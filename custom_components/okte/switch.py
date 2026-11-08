@@ -29,6 +29,8 @@ from .const import (
     ENTITY_LOWEST_TIME_TO,
     ENTITY_HIGHEST_TIME_FROM,
     ENTITY_HIGHEST_TIME_TO,
+    AUTO_TIME_PREFIX_KEYS,
+    apply_sun_prefix,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -48,14 +50,17 @@ async def async_setup_entry(
         LOGGER.info(f"Skipping switch entities - not a Window device (type: {device_type})")
         return
     
-    instance = hass.data[DOMAIN][config_entry.entry_id]["instance"]
+    instance = config_entry.runtime_data.instance
     LOGGER.info(f"Creating switch entities for Calculator device")
     
+    from .sensor import _load_translations
+    translations = await _load_translations(hass)
+    
     switches = [
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_TIME_FROM),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_TO, ENTITY_LOWEST_TIME_TO),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_FROM, ENTITY_HIGHEST_TIME_FROM),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_TO, ENTITY_HIGHEST_TIME_TO),
+        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_TIME_FROM, translations),
+        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_TO, ENTITY_LOWEST_TIME_TO, translations),
+        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_FROM, ENTITY_HIGHEST_TIME_FROM, translations),
+        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_TO, ENTITY_HIGHEST_TIME_TO, translations),
     ]
     
     LOGGER.info(f"Adding {len(switches)} switch entities")
@@ -71,9 +76,11 @@ class OkteAutoTimeSwitch(SwitchEntity):
         config_entry: ConfigEntry, 
         instance, 
         entity_id: str,
-        time_entity_id: str
+        time_entity_id: str,
+        translations: dict | None = None
     ):
         """Initialize the switch entity."""
+        self._translations = translations or {}
         self.hass = hass
         self.config_entry = config_entry
         self.instance = instance
@@ -264,6 +271,13 @@ class OkteAutoTimeSwitch(SwitchEntity):
         time_raw = sun_time.time()
         time_value = dt_time(time_raw.hour, time_raw.minute)
         
+        # Apply prefix (day start + prefix / day end - prefix)
+        time_value = apply_sun_prefix(
+            time_value,
+            self.instance.time_values.get(AUTO_TIME_PREFIX_KEYS.get(self._time_entity_id)),
+            is_from,
+        )
+        
         # Get old value for comparison
         old_value = self.instance.time_values.get(self._time_entity_id)
         
@@ -334,21 +348,15 @@ class OkteAutoTimeSwitch(SwitchEntity):
     @property
     def name(self) -> str:
         """Return the name - dynamically generated with device prefix."""
-        # Base names
-        names = {
-            ENTITY_LOWEST_AUTO_TIME_FROM: "Časový rozsah pre najnižšie ceny 'od' bude východ slnka",
-            ENTITY_LOWEST_AUTO_TIME_TO: "Časový rozsah pre najnižšie ceny 'do' bude západ slnka",
-            ENTITY_HIGHEST_AUTO_TIME_FROM: "Časový rozsah pre najvyššie ceny 'od' bude východ slnka",
-            ENTITY_HIGHEST_AUTO_TIME_TO: "Časový rozsah pre najvyššie ceny 'do' bude západ slnka",
-        }
-        translated_name = names.get(self._entity_id_key, self._entity_id_key)
+        translated_name = (
+            self._translations.get("entity", {}).get("switch", {}).get(self._entity_id_key, {}).get("name")
+            or self._entity_id_key
+        )
         
         # Apply prefix based on checkbox setting
         if self.instance.settings.include_device_name_in_entity:
             # Calculator: "OKTE - {device_label} - {translated_name}"
-            from homeassistant.helpers import device_registry as dr
-            device_registry = dr.async_get(self.hass)
-            device_entry = device_registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+            device_entry = self.device_entry
             
             if device_entry and device_entry.name_by_user:
                 device_label = device_entry.name_by_user

@@ -38,7 +38,7 @@ async def _load_translations(hass: HomeAssistant) -> dict:
             if os.path.exists(translations_path):
                 with open(translations_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-        except:
+        except Exception:
             pass
         return {}
     
@@ -50,8 +50,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor entities."""
-    instance = hass.data[DOMAIN][entry.entry_id]["instance"]
-    device_type = hass.data[DOMAIN][entry.entry_id]["device_type"]
+    instance = entry.runtime_data.instance
+    device_type = entry.runtime_data.device_type
     
     translations = await _load_translations(hass)
 
@@ -427,9 +427,7 @@ class SensorEntityDefinition(SensorEntity):
             else:
                 # Calculator: "OKTE - {device_label} - {translated_name}"
                 # Get device label from Home Assistant (the name user sets in native HA dialog)
-                from homeassistant.helpers import device_registry as dr
-                device_registry = dr.async_get(self.hass)
-                device_entry = device_registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+                device_entry = self.device_entry
                 
                 if device_entry and device_entry.name_by_user:
                     device_label = device_entry.name_by_user
@@ -557,6 +555,14 @@ class SensorEntityDefinition(SensorEntity):
                                           ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
                     self._window_data = initial_value
                     LOGGER.debug(f"Entity {self.entity_id} initialized with window data")
+                # For timestamp sensor - ISO string must be converted to timezone-aware datetime
+                elif self._entity_id == ENTITY_LAST_UPDATE:
+                    try:
+                        from datetime import datetime
+                        self._attr_native_value = datetime.fromisoformat(initial_value)
+                    except (TypeError, ValueError):
+                        self._attr_native_value = None
+                    LOGGER.debug(f"Entity {self.entity_id} initialized with timestamp: {self._attr_native_value}")
                 # For other sensors - normal value
                 else:
                     self._attr_native_value = initial_value
@@ -702,7 +708,7 @@ class SensorEntityDefinition(SensorEntity):
                     if is_lowest:
                         # Window size from number entity
                         if hasattr(self._instance, 'number_values'):
-                            periods = self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
+                            periods = data.get('periods') or self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
                             total_minutes = periods * 15
                             hours = total_minutes // 60
                             minutes = total_minutes % 60
@@ -721,6 +727,11 @@ class SensorEntityDefinition(SensorEntity):
                                 dt_to = datetime.combine(datetime.today(), time_to)
                                 diff = abs(dt_to - dt_from)
                                 total_minutes = int(diff.total_seconds() / 60)
+                                if self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW]:
+                                    # Main sensors search from time_from today to time_to tomorrow
+                                    from_min = time_from.hour * 60 + time_from.minute
+                                    to_min = 1440 if (time_to.hour == 23 and time_to.minute == 59) else time_to.hour * 60 + time_to.minute
+                                    total_minutes = (1440 - from_min) + to_min
                                 hours = total_minutes // 60
                                 minutes = total_minutes % 60
                                 search_window_size_value = f"{hours}:{minutes:02d}"
@@ -731,7 +742,7 @@ class SensorEntityDefinition(SensorEntity):
                     else:
                         # Window size from number entity
                         if hasattr(self._instance, 'number_values'):
-                            periods = self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
+                            periods = data.get('periods') or self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
                             total_minutes = periods * 15
                             hours = total_minutes // 60
                             minutes = total_minutes % 60
@@ -750,6 +761,11 @@ class SensorEntityDefinition(SensorEntity):
                                 dt_to = datetime.combine(datetime.today(), time_to)
                                 diff = abs(dt_to - dt_from)
                                 total_minutes = int(diff.total_seconds() / 60)
+                                if self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW]:
+                                    # Main sensors search from time_from today to time_to tomorrow
+                                    from_min = time_from.hour * 60 + time_from.minute
+                                    to_min = 1440 if (time_to.hour == 23 and time_to.minute == 59) else time_to.hour * 60 + time_to.minute
+                                    total_minutes = (1440 - from_min) + to_min
                                 hours = total_minutes // 60
                                 minutes = total_minutes % 60
                                 search_window_size_value = f"{hours}:{minutes:02d}"
@@ -786,7 +802,7 @@ class SensorEntityDefinition(SensorEntity):
                             "avg_price": None,
                             "records": []
                         }
-                except:
+                except Exception:
                     return {}
             # No data available - return structure with null values
             return {
@@ -900,7 +916,7 @@ class SensorEntityDefinition(SensorEntity):
                     if data.get('found'):
                         return STATE_WINDOW_FOUND
                     return STATE_WINDOW_NOT_FOUND
-                except:
+                except Exception:
                     return STATE_WINDOW_NOT_FOUND
             return STATE_WINDOW_NOT_FOUND
         

@@ -25,6 +25,14 @@ from .const import *
 
 LOGGER = logging.getLogger(__name__)
 
+STORAGE_VERSION = 1
+
+
+def get_prices_store(hass, entry_id):
+    """Return Store used to persist downloaded price data."""
+    from homeassistant.helpers.storage import Store
+    return Store(hass, STORAGE_VERSION, f"{DOMAIN}_{entry_id}_prices")
+
 # Color and styling constants for HTML tables
 COLOR_PRICE_HIGH = "#009000"  # Green for high prices
 COLOR_PRICE_LOW = "#d08000"  # Orange for low prices
@@ -245,6 +253,75 @@ def calculate_price_statistics(data):
     }
 
 
+def _range_end_minutes(time_obj):
+    """Minutes of the end of a time range. 23:59 means the end of the day (24:00)."""
+    if time_obj.hour == 23 and time_obj.minute == 59:
+        return 1440
+    return time_obj.hour * 60 + time_obj.minute
+
+
+def _period_minutes(record):
+    """Return (start, end) of a period in minutes of the day; the end of the last period is 1440."""
+    start_dt = datetime.strptime(record['HourStartCET'], '%H:%M')
+    start = start_dt.hour * 60 + start_dt.minute
+    end_str = record.get('HourEndCET')
+    if end_str:
+        end_dt = datetime.strptime(end_str, '%H:%M')
+        end = end_dt.hour * 60 + end_dt.minute
+    else:
+        end = start + 15
+    if end <= start:
+        end += 1440
+    return start, end
+
+
+def limit_periods_to_time_range(periods, time_from_str, time_to_str, cross_days=False):
+    """
+    Limit the number of periods so the window never exceeds the from-to time range.
+    The range is converted to 15-minute periods and rounded down (e.g. 2:16 -> 9 periods).
+    The configured value is not changed - only the value used for the calculation.
+    """
+    try:
+        time_from = datetime.strptime(time_from_str, '%H:%M').time()
+        time_to = datetime.strptime(time_to_str, '%H:%M').time()
+    except ValueError:
+        return periods
+
+    from_minutes = time_from.hour * 60 + time_from.minute
+    to_minutes = _range_end_minutes(time_to)
+
+    # Only whole 15-minute periods lying completely inside the range are used:
+    # the first period starts at time_from rounded up, the last one ends at time_to rounded down
+    first_start = -(-from_minutes // 15) * 15
+    last_end = (to_minutes // 15) * 15
+
+    if cross_days:
+        # From time_from today (until the end of the day) + from the start of tomorrow to time_to
+        available = (1440 - first_start) // 15 + last_end // 15
+    else:
+        available = (last_end - first_start) // 15
+        if to_minutes - from_minutes < 0:
+            # time_to is before time_from - no data in a single day, nothing to limit
+            return periods
+
+    return min(periods, max(available, 0))
+
+
+def _window_too_short_result(periods):
+    """Result when the from-to time range is shorter than one period."""
+    return {
+        'found': False,
+        'message': 'Time range is shorter than one period',
+        'start_time': None,
+        'end_time': None,
+        'periods': periods,
+        'min_price': None,
+        'max_price': None,
+        'avg_price': None,
+        'records': []
+    }
+
+
 def find_window_cross_days(today_data, tomorrow_data, periods, time_from_str, time_to_str, find_lowest=True, hass=None):
     """
     Find time window with lowest or highest average price across two days.
@@ -264,6 +341,14 @@ def find_window_cross_days(today_data, tomorrow_data, periods, time_from_str, ti
     """
     # Convert periods to int
     periods = int(periods)
+
+    # Limit periods to the from-to time range (rounded down)
+    limited_periods = limit_periods_to_time_range(periods, time_from_str, time_to_str, cross_days=True)
+    if limited_periods != periods:
+        LOGGER.debug(f"OKTE Calculation: Cross-day periods limited from {periods} to {limited_periods} by time range {time_from_str}-{time_to_str}")
+        periods = limited_periods
+    if periods < 1:
+        return _window_too_short_result(periods)
     
     # Parse time range
     try:
@@ -299,8 +384,8 @@ def find_window_cross_days(today_data, tomorrow_data, periods, time_from_str, ti
     for record in tomorrow_data:
         if record['price'] is not None and record['deliveryStart'] is not None and record['HourStartCET'] is not None:
             try:
-                period_start_time = datetime.strptime(record['HourStartCET'], '%H:%M').time()
-                if period_start_time <= time_to:
+                _period_start, period_end = _period_minutes(record)
+                if period_end <= _range_end_minutes(time_to):
                     combined_data.append(record)
             except ValueError:
                 continue
@@ -392,7 +477,7 @@ def find_window_cross_days(today_data, tomorrow_data, periods, time_from_str, ti
                 delivery_end_dt = datetime.fromisoformat(record.get('deliveryEnd').replace('Z', '+00:00'))
                 period_start_utc = delivery_start_dt.strftime('%H:%M')
                 period_end_utc = delivery_end_dt.strftime('%H:%M')
-            except:
+            except Exception:
                 period_start_utc = record.get('HourStartCET')
                 period_end_utc = record.get('HourEndCET')
             
@@ -453,6 +538,14 @@ def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lo
     """
     # Convert periods to int in case it's a float
     periods = int(periods)
+
+    # Limit periods to the from-to time range (rounded down)
+    limited_periods = limit_periods_to_time_range(periods, time_from_str, time_to_str)
+    if limited_periods != periods:
+        LOGGER.debug(f"OKTE Calculation: Periods limited from {periods} to {limited_periods} by time range {time_from_str}-{time_to_str}")
+        periods = limited_periods
+    if periods < 1:
+        return _window_too_short_result(periods)
     
     if not data or len(data) < periods:
         return {
@@ -507,10 +600,10 @@ def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lo
     filtered_data = []
     for record in valid_data:
         try:
-            period_start_time = datetime.strptime(record['HourStartCET'], '%H:%M').time()
-            if time_from <= period_start_time <= time_to:
+            period_start, period_end = _period_minutes(record)
+            if time_from.hour * 60 + time_from.minute <= period_start and period_end <= _range_end_minutes(time_to):
                 filtered_data.append(record)
-        except:
+        except Exception:
             continue
     
     if len(filtered_data) < periods:
@@ -529,7 +622,7 @@ def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lo
     # Sort by deliveryStart
     try:
         filtered_data.sort(key=lambda x: x['deliveryStart'])
-    except:
+    except Exception:
         return {
             'found': False,
             'message': 'Error sorting data by time',
@@ -558,7 +651,7 @@ def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lo
                 if end_time != start_time:
                     is_continuous = False
                     break
-            except:
+            except Exception:
                 is_continuous = False
                 break
         
@@ -621,7 +714,7 @@ def find_window_in_time_range(data, periods, time_from_str, time_to_str, find_lo
                 delivery_end_dt = datetime.fromisoformat(record.get('deliveryEnd').replace('Z', '+00:00'))
                 period_start_utc = delivery_start_dt.strftime('%H:%M')
                 period_end_utc = delivery_end_dt.strftime('%H:%M')
-            except:
+            except Exception:
                 period_start_utc = record.get('HourStartCET')
                 period_end_utc = record.get('HourEndCET')
             
@@ -723,6 +816,7 @@ class OKTE_Master_Instance:
         
         # Retry timer for failed API fetch
         self._retry_timer = None
+        self._closed = False
 
         # Entity IDs
         self.SENSOR_ENTITY_CONNECTION_STATUS = None
@@ -779,6 +873,13 @@ class OKTE_Master_Instance:
             LOGGER.debug(f"Master Device System Started: {self.settings.device_name}")
         except Exception as e:
             LOGGER.error(f"Error during System Started: {e}")
+
+    def async_shutdown(self):
+        """Cancel pending timers (called when the config entry is unloaded)."""
+        self._closed = True
+        if self._retry_timer is not None:
+            self._retry_timer()
+            self._retry_timer = None
 
     async def update_current_price(self):
         """Update only current price from already fetched data - no API call."""
@@ -875,374 +976,479 @@ class OKTE_Master_Instance:
         except Exception as e:
             LOGGER.error(f"OKTE API: Error updating current price: {e}")
 
+    @staticmethod
+    def _merge_data(old_data, new_data, today_str):
+        """Merge new API records into stored ones (by deliveryStart) and drop days older than today."""
+        merged = {}
+        for idx, rec in enumerate(old_data or []):
+            merged[rec.get('deliveryStart') or f"_old_{idx}"] = rec
+        for idx, rec in enumerate(new_data or []):
+            merged[rec.get('deliveryStart') or f"_new_{idx}"] = rec
+        return [
+            rec for _key, rec in sorted(merged.items())
+            if (rec.get('deliveryDayCET') or '') >= today_str
+        ]
+
+    def _apply_data(self):
+        """Recompute today/tomorrow split and all derived sensors from stored all_data."""
+        data = self.price_data.get('all_data') or []
+        current_local_time = self._get_current_local_time()
+        today = current_local_time.date()
+        tomorrow = today + timedelta(days=1)
+
+        self.price_data['today_data'] = filter_data_by_date(data, today)
+        self.price_data['tomorrow_data'] = filter_data_by_date(data, tomorrow)
+        self.price_data['data_date'] = today.strftime('%Y-%m-%d')
+        self.price_data['data_version'] = self.price_data.get('data_version', 0) + 1
+
+        LOGGER.info(f"OKTE API: Data split for {today.strftime('%Y-%m-%d')} - Total: {len(data)}, Today: {len(self.price_data['today_data'])}, Tomorrow: {len(self.price_data['tomorrow_data'])}")
+
+        today_stats = calculate_price_statistics(self.price_data['today_data'])
+        tomorrow_stats = calculate_price_statistics(self.price_data['tomorrow_data'])
+
+        self.sensor_states[ENTITY_DATA_COUNT] = len(data)
+
+        # Error bit 1 (value 2): no valid data for today
+        if self.price_data['today_data']:
+            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] & ~2
+        else:
+            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 2
+
+        # Today statistics
+        self.sensor_states[ENTITY_AVERAGE_PRICE_TODAY] = today_stats['avg_price']
+        self.sensor_states[ENTITY_MIN_PRICE_TODAY] = today_stats['min_price']
+        self.sensor_states[ENTITY_MAX_PRICE_TODAY] = today_stats['max_price']
+        
+        # Today min/max price attributes
+        if today_stats['min_record']:
+            min_rec = today_stats['min_record']
+            self.sensor_attributes[ENTITY_MIN_PRICE_TODAY] = {
+                'available': True,
+                'time': format_local_time(min_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
+                'period': min_rec.get('period'),
+                'period_start': format_local_time(min_rec.get('deliveryStart'), '%H:%M', self.hass),
+                'period_end': format_local_time(min_rec.get('deliveryEnd'), '%H:%M', self.hass),
+            }
+        else:
+            self.sensor_attributes[ENTITY_MIN_PRICE_TODAY] = {
+                'available': False,
+            }
+        
+        if today_stats['max_record']:
+            max_rec = today_stats['max_record']
+            self.sensor_attributes[ENTITY_MAX_PRICE_TODAY] = {
+                'available': True,
+                'time': format_local_time(max_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
+                'period': max_rec.get('period'),
+                'period_start': format_local_time(max_rec.get('deliveryStart'), '%H:%M', self.hass),
+                'period_end': format_local_time(max_rec.get('deliveryEnd'), '%H:%M', self.hass),
+            }
+        else:
+            self.sensor_attributes[ENTITY_MAX_PRICE_TODAY] = {
+                'available': False,
+            }
+        
+        # Tomorrow statistics
+        self.sensor_states[ENTITY_AVERAGE_PRICE_TOMORROW] = tomorrow_stats['avg_price']
+        self.sensor_states[ENTITY_MIN_PRICE_TOMORROW] = tomorrow_stats['min_price']
+        self.sensor_states[ENTITY_MAX_PRICE_TOMORROW] = tomorrow_stats['max_price']
+        
+        # Tomorrow min/max price attributes
+        if tomorrow_stats['min_record']:
+            min_rec = tomorrow_stats['min_record']
+            self.sensor_attributes[ENTITY_MIN_PRICE_TOMORROW] = {
+                'available': True,
+                'time': format_local_time(min_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
+                'period': min_rec.get('period'),
+                'period_start': format_local_time(min_rec.get('deliveryStart'), '%H:%M', self.hass),
+                'period_end': format_local_time(min_rec.get('deliveryEnd'), '%H:%M', self.hass),
+            }
+        else:
+            self.sensor_attributes[ENTITY_MIN_PRICE_TOMORROW] = {
+                'available': False,
+            }
+        
+        if tomorrow_stats['max_record']:
+            max_rec = tomorrow_stats['max_record']
+            self.sensor_attributes[ENTITY_MAX_PRICE_TOMORROW] = {
+                'available': True,
+                'time': format_local_time(max_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
+                'period': max_rec.get('period'),
+                'period_start': format_local_time(max_rec.get('deliveryStart'), '%H:%M', self.hass),
+                'period_end': format_local_time(max_rec.get('deliveryEnd'), '%H:%M', self.hass),
+            }
+        else:
+            self.sensor_attributes[ENTITY_MAX_PRICE_TOMORROW] = {
+                'available': False,
+            }
+        
+        # Current price - use local timezone
+        current_local_time = self._get_current_local_time()
+        current_hour = current_local_time.replace(minute=0, second=0, microsecond=0)
+        LOGGER.debug(f"Looking for current price at local time: {current_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')}, current_hour: {current_hour.strftime('%H:%M')}")
+        current_record = None
+        for record in data:
+            try:
+                # Parse UTC time from API and convert to local timezone
+                utc_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
+                try:
+                    import zoneinfo
+                    ha_timezone = self.hass.config.time_zone
+                    tz = zoneinfo.ZoneInfo(ha_timezone)
+                    local_start = utc_start.astimezone(tz)
+                except ImportError:
+                    # Fallback
+                    local_start = utc_start + timedelta(hours=1)
+                
+                # Compare hours (ignore minutes/seconds)
+                local_start_hour = local_start.replace(minute=0, second=0, microsecond=0)
+                if local_start_hour == current_hour:
+                    current_record = record
+                    LOGGER.debug(f"Found current price: {record['price']} EUR/MWh for time slot {local_start.strftime('%H:%M')}")
+                    break
+            except Exception as e:
+                LOGGER.debug(f"Error parsing delivery time: {e}")
+                continue
+        
+        if not current_record:
+            LOGGER.warning(f"No current price found for {current_hour.strftime('%H:%M')}")
+        
+        self.sensor_states[ENTITY_CURRENT_PRICE] = current_record['price'] if current_record else None
+        
+        # Calculate overall statistics for current price attributes
+        all_stats = calculate_price_statistics(data)
+        
+        # Current price attributes
+        if current_record:
+            self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
+                'period': current_record.get('period'),
+                'period_start': format_local_time(current_record.get('deliveryStart'), '%H:%M', self.hass),
+                'period_end': format_local_time(current_record.get('deliveryEnd'), '%H:%M', self.hass),
+                'total_records': len(data),
+                'today_average': today_stats['avg_price'],
+                'tomorrow_average': tomorrow_stats['avg_price'],
+                'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
+            }
+        else:
+            self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
+                'total_records': len(data),
+                'today_average': today_stats['avg_price'],
+                'tomorrow_average': tomorrow_stats['avg_price'],
+                'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
+            }
+        
+        # Prices - create detailed attributes like in original integration
+        # Process TODAY data
+        today_period_data = []
+        today_valid_records = [record for record in self.price_data['today_data'] 
+                              if record.get('price') is not None and record.get('deliveryStart')]
+        today_valid_records.sort(key=lambda x: x.get('deliveryStart', ''))
+        
+        for record in today_valid_records:
+            try:
+                delivery_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
+                
+                # Convert to local timezone
+                try:
+                    import zoneinfo
+                    ha_timezone = self.hass.config.time_zone
+                    tz = zoneinfo.ZoneInfo(ha_timezone)
+                    delivery_local = delivery_start.astimezone(tz)
+                except ImportError:
+                    delivery_local = delivery_start + timedelta(hours=1)
+                
+                period_entry = {
+                    'time': record['deliveryStart'],  # ISO format for graphs
+                    'time_local': delivery_local.strftime('%Y-%m-%d %H:%M:%S'),
+                    'price': record['price'],
+                    'period': record.get('period'),
+                    'period_start': record.get('HourStartCET'),
+                    'period_end': record.get('HourEndCET'),
+                    'date': record.get('deliveryDayCET'),
+                    'day_name': delivery_local.strftime('%A'),
+                    'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
+                    'timestamp': int(delivery_start.timestamp() * 1000)  # For ApexCharts
+                }
+                today_period_data.append(period_entry)
+            except Exception as e:
+                LOGGER.debug(f"Error processing today hourly record: {e}")
+                continue
+        
+        today_prices_list = [entry['price'] for entry in today_period_data]
+        today_timestamps_list = [entry['time'] for entry in today_period_data]
+        today_labels_list = [entry['period_label'] for entry in today_period_data]
+        
+        self.sensor_states[ENTITY_PRICES_TODAY] = len(today_valid_records)
+        self.sensor_attributes[ENTITY_PRICES_TODAY] = {
+            'period_data': today_period_data,
+            'periods': len(today_period_data),
+            'date_range': today.strftime('%Y-%m-%d'),
+            'prices_list': today_prices_list,
+            'timestamps_list': today_timestamps_list,
+            'labels_list': today_labels_list,
+            'min_price': min(today_prices_list) if today_prices_list else None,
+            'max_price': max(today_prices_list) if today_prices_list else None,
+            'avg_price': round(sum(today_prices_list) / len(today_prices_list), 2) if today_prices_list else None
+        }
+        
+        # Process TOMORROW data
+        tomorrow_period_data = []
+        tomorrow_valid_records = [record for record in self.price_data['tomorrow_data']
+                                 if record.get('price') is not None and record.get('deliveryStart')]
+        tomorrow_valid_records.sort(key=lambda x: x.get('deliveryStart', ''))
+        
+        for record in tomorrow_valid_records:
+            try:
+                delivery_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
+                
+                # Convert to local timezone
+                try:
+                    import zoneinfo
+                    ha_timezone = self.hass.config.time_zone
+                    tz = zoneinfo.ZoneInfo(ha_timezone)
+                    delivery_local = delivery_start.astimezone(tz)
+                except ImportError:
+                    delivery_local = delivery_start + timedelta(hours=1)
+                
+                period_entry = {
+                    'time': record['deliveryStart'],
+                    'time_local': delivery_local.strftime('%Y-%m-%d %H:%M:%S'),
+                    'price': record['price'],
+                    'period': record.get('period'),
+                    'period_start': record.get('HourStartCET'),
+                    'period_end': record.get('HourEndCET'),
+                    'date': record.get('deliveryDayCET'),
+                    'day_name': delivery_local.strftime('%A'),
+                    'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
+                    'timestamp': int(delivery_start.timestamp() * 1000)
+                }
+                tomorrow_period_data.append(period_entry)
+            except Exception as e:
+                LOGGER.debug(f"Error processing tomorrow hourly record: {e}")
+                continue
+        
+        tomorrow_prices_list = [entry['price'] for entry in tomorrow_period_data]
+        tomorrow_timestamps_list = [entry['time'] for entry in tomorrow_period_data]
+        tomorrow_labels_list = [entry['period_label'] for entry in tomorrow_period_data]
+        
+        self.sensor_states[ENTITY_PRICES_TOMORROW] = len(tomorrow_valid_records)
+        self.sensor_attributes[ENTITY_PRICES_TOMORROW] = {
+            'period_data': tomorrow_period_data,
+            'periods': len(tomorrow_period_data),
+            'date_range': tomorrow.strftime('%Y-%m-%d'),
+            'prices_list': tomorrow_prices_list,
+            'timestamps_list': tomorrow_timestamps_list,
+            'labels_list': tomorrow_labels_list,
+            'min_price': min(tomorrow_prices_list) if tomorrow_prices_list else None,
+            'max_price': max(tomorrow_prices_list) if tomorrow_prices_list else None,
+            'avg_price': round(sum(tomorrow_prices_list) / len(tomorrow_prices_list), 2) if tomorrow_prices_list else None
+        }
+        
+        LOGGER.info(f"Set ENTITY_PRICES_TODAY: {len(today_valid_records)} records in attributes")
+        LOGGER.info(f"Set ENTITY_PRICES_TOMORROW: {len(tomorrow_valid_records)} records in attributes")
+        
+        # HTML tables - pass dates to ensure correct formatting
+        html_today = self.generate_html_table_today(self.price_data['today_data'], today)
+        html_tomorrow = self.generate_html_table_tomorrow(self.price_data['tomorrow_data'], tomorrow)
+        
+        # Count valid records for today
+        today_valid_records = [record for record in self.price_data['today_data'] 
+                              if record.get('price') is not None and record.get('deliveryStart')]
+        
+        # Count valid records for tomorrow  
+        tomorrow_valid_records = [record for record in self.price_data['tomorrow_data']
+                                 if record.get('price') is not None and record.get('deliveryStart')]
+        
+        # Set state to count of records
+        self.sensor_states[ENTITY_HTML_TABLE_TODAY] = len(today_valid_records)
+        self.sensor_states[ENTITY_HTML_TABLE_TOMORROW] = len(tomorrow_valid_records)
+        
+        # Set attributes - use local time
+        self.sensor_attributes[ENTITY_HTML_TABLE_TODAY] = {
+            'html_table': html_today,
+            'total_records': len(today_valid_records),
+            'date': today.strftime('%d.%m.%Y'),
+            'available': len(today_valid_records) > 0,
+            'last_update': current_local_time.isoformat()
+        }
+        
+        self.sensor_attributes[ENTITY_HTML_TABLE_TOMORROW] = {
+            'html_table': html_tomorrow,
+            'total_records': len(tomorrow_valid_records),
+            'date': tomorrow.strftime('%d.%m.%Y'),
+            'available': len(tomorrow_valid_records) > 0,
+            'last_update': current_local_time.isoformat()
+        }
+        
+        LOGGER.info(f"Set ENTITY_HTML_TABLE_TODAY: {len(html_today)} chars in attributes")
+        LOGGER.info(f"Set ENTITY_HTML_TABLE_TOMORROW: {len(html_tomorrow)} chars in attributes")
+
+        LOGGER.info(f"Successfully processed {len(data)} price records")
+
+    def _roll_over_if_needed(self):
+        """Move stored data to the current day (tomorrow -> today) without any API call."""
+        today_str = self._get_current_local_time().strftime('%Y-%m-%d')
+        if self.price_data.get('data_date') == today_str:
+            return False
+        all_data = self.price_data.get('all_data') or []
+        if not all_data and self.price_data.get('data_date') is None:
+            return False
+        self.price_data['all_data'] = [
+            rec for rec in all_data if (rec.get('deliveryDayCET') or '') >= today_str
+        ]
+        LOGGER.info(f"OKTE API: Day changed to {today_str} - rolling stored data over (no API call)")
+        self._apply_data()
+        return True
+
+    async def async_rollover(self):
+        """Scheduled midnight rollover of stored data."""
+        try:
+            if self._roll_over_if_needed():
+                async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
+        except Exception as e:
+            LOGGER.error(f"OKTE API: Error during day rollover: {e}")
+
+    async def async_load_stored_data(self):
+        """Restore last known data from storage (used after HA restart during API outage)."""
+        try:
+            stored = await get_prices_store(self.hass, self._entry_id).async_load()
+            if not stored:
+                return
+            today_str = self._get_current_local_time().strftime('%Y-%m-%d')
+            records = [
+                rec for rec in (stored.get('all_data') or [])
+                if isinstance(rec, dict) and (rec.get('deliveryDayCET') or '') >= today_str
+            ]
+            if not records:
+                LOGGER.info("OKTE API: Stored data is outdated, ignoring")
+                return
+            self.price_data['all_data'] = records
+            last_fetch = None
+            if stored.get('last_fetch'):
+                try:
+                    last_fetch = datetime.fromisoformat(stored['last_fetch'])
+                except ValueError:
+                    last_fetch = None
+            self.price_data['last_fetch'] = last_fetch
+            self._apply_data()
+            if last_fetch:
+                self.sensor_states[ENTITY_LAST_UPDATE] = last_fetch.isoformat()
+            self.sensor_attributes[ENTITY_LAST_UPDATE] = {
+                'data_records': len(records),
+                'status': 'Restored from storage',
+            }
+            LOGGER.info(f"OKTE API: Restored {len(records)} records from storage")
+        except Exception as e:
+            LOGGER.warning(f"OKTE API: Could not restore stored data: {e}")
+
+    async def _async_save_data(self):
+        """Persist current data so it survives a restart."""
+        try:
+            last_fetch = self.price_data.get('last_fetch')
+            await get_prices_store(self.hass, self._entry_id).async_save({
+                'all_data': self.price_data.get('all_data') or [],
+                'last_fetch': last_fetch.isoformat() if last_fetch else None,
+            })
+        except Exception as e:
+            LOGGER.warning(f"OKTE API: Could not save data to storage: {e}")
+
+    def _handle_fetch_failure(self, description):
+        """API fetch failed - keep stored data (rolled over to the current day) and schedule retry."""
+        current_local_time = self._get_current_local_time()
+        self.sensor_states[ENTITY_CONNECTION_STATUS] = False
+
+        # Set API fetch error bit (bit 0)
+        self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 1
+
+        # Keep stored data, but make sure it belongs to the current day
+        self._roll_over_if_needed()
+        has_today = bool(self.price_data.get('today_data'))
+        if has_today:
+            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] & ~2
+        else:
+            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 2
+
+        # Schedule retry in 1 minute
+        self._schedule_retry()
+
+        last_fetch = self.price_data.get('last_fetch')
+        self.sensor_attributes[ENTITY_CONNECTION_STATUS] = {
+            'status': 'Disconnected',
+            'status_description': description,
+            'last_attempt': current_local_time.isoformat(),
+            'using_stored_data': has_today,
+            'stored_data_fetched': last_fetch.isoformat() if last_fetch else None,
+            'stored_data_days': sorted({rec.get('deliveryDayCET') for rec in (self.price_data.get('all_data') or []) if rec.get('deliveryDayCET')}),
+        }
+        self.sensor_attributes[ENTITY_LAST_UPDATE] = {
+            'data_records': len(self.price_data.get('all_data') or []),
+            'status': 'Stored data (API unavailable)' if has_today else 'No valid data for today',
+        }
+
     async def fetch_and_process_data(self):
-        """Fetch data from API and process it."""
+        """Fetch data from API and process it. On failure the stored data is kept."""
         try:
             LOGGER.info("OKTE API: Fetching price data from OKTE API...")
-            
+
             # Fetch data with hass parameter for timezone conversion
             data = await self.hass.async_add_executor_job(
-                fetch_okte_data, 
-                self.settings.fetch_days, 
+                fetch_okte_data,
+                self.settings.fetch_days,
                 None,
                 self.hass
             )
-            
-            if data:
-                self.price_data['all_data'] = data
-                self.price_data['last_fetch'] = self._get_current_local_time()
-                
-                # Filter today and tomorrow data - use local timezone
-                current_local_time = self._get_current_local_time()
-                today = current_local_time.date()
-                tomorrow = today + timedelta(days=1)
-                
-                LOGGER.debug(f"OKTE API: Filtering data for today: {today.strftime('%Y-%m-%d')} (local timezone)")
-                
-                self.price_data['today_data'] = filter_data_by_date(data, today)
-                self.price_data['tomorrow_data'] = filter_data_by_date(data, tomorrow)
-                
-                LOGGER.info(f"OKTE API: Successfully fetched {len(data)} records - Today: {len(self.price_data['today_data'])}, Tomorrow: {len(self.price_data['tomorrow_data'])}")
-                
-                # Calculate statistics
-                today_stats = calculate_price_statistics(self.price_data['today_data'])
-                tomorrow_stats = calculate_price_statistics(self.price_data['tomorrow_data'])
-                
-                # Update sensor states
+
+            current_local_time = self._get_current_local_time()
+            today_str = current_local_time.strftime('%Y-%m-%d')
+            has_today = bool(data) and any(rec.get('deliveryDayCET') == today_str for rec in data)
+
+            if data and not has_today:
+                LOGGER.warning("OKTE API: Response does not contain data for today - ignoring it, keeping stored data")
+
+            if has_today:
+                self.price_data['all_data'] = self._merge_data(self.price_data.get('all_data'), data, today_str)
+                self.price_data['last_fetch'] = current_local_time
+                self._apply_data()
+
                 self.sensor_states[ENTITY_CONNECTION_STATUS] = True
                 self.sensor_states[ENTITY_LAST_UPDATE] = current_local_time.isoformat()
-                self.sensor_states[ENTITY_DATA_COUNT] = len(data)
-                
-                # Clear API fetch error bit (bit 0)
-                self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] & ~1
-                
+
+                # Clear API fetch error bit (bit 0) and "no data for today" bit (bit 1)
+                self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] & ~3
+
                 # Cancel retry timer if it exists (fetch succeeded)
                 if self._retry_timer is not None:
                     self._retry_timer()
                     self._retry_timer = None
                     LOGGER.debug("OKTE API: Cancelled retry timer - fetch successful")
-                
-                # Connection status attributes
+
                 self.sensor_attributes[ENTITY_CONNECTION_STATUS] = {
                     'status': 'Connected',
                     'status_description': 'Last data fetch was successful',
                     'last_attempt': current_local_time.isoformat(),
+                    'using_stored_data': False,
                 }
-                
-                # Last update attributes
                 self.sensor_attributes[ENTITY_LAST_UPDATE] = {
-                    'data_records': len(data),
+                    'data_records': len(self.price_data['all_data']),
                     'status': 'Data available',
                 }
-                
-                # Today statistics
-                self.sensor_states[ENTITY_AVERAGE_PRICE_TODAY] = today_stats['avg_price']
-                self.sensor_states[ENTITY_MIN_PRICE_TODAY] = today_stats['min_price']
-                self.sensor_states[ENTITY_MAX_PRICE_TODAY] = today_stats['max_price']
-                
-                # Today min/max price attributes
-                if today_stats['min_record']:
-                    min_rec = today_stats['min_record']
-                    self.sensor_attributes[ENTITY_MIN_PRICE_TODAY] = {
-                        'available': True,
-                        'time': format_local_time(min_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
-                        'period': min_rec.get('period'),
-                        'period_start': format_local_time(min_rec.get('deliveryStart'), '%H:%M', self.hass),
-                        'period_end': format_local_time(min_rec.get('deliveryEnd'), '%H:%M', self.hass),
-                    }
-                else:
-                    self.sensor_attributes[ENTITY_MIN_PRICE_TODAY] = {
-                        'available': False,
-                    }
-                
-                if today_stats['max_record']:
-                    max_rec = today_stats['max_record']
-                    self.sensor_attributes[ENTITY_MAX_PRICE_TODAY] = {
-                        'available': True,
-                        'time': format_local_time(max_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
-                        'period': max_rec.get('period'),
-                        'period_start': format_local_time(max_rec.get('deliveryStart'), '%H:%M', self.hass),
-                        'period_end': format_local_time(max_rec.get('deliveryEnd'), '%H:%M', self.hass),
-                    }
-                else:
-                    self.sensor_attributes[ENTITY_MAX_PRICE_TODAY] = {
-                        'available': False,
-                    }
-                
-                # Tomorrow statistics
-                self.sensor_states[ENTITY_AVERAGE_PRICE_TOMORROW] = tomorrow_stats['avg_price']
-                self.sensor_states[ENTITY_MIN_PRICE_TOMORROW] = tomorrow_stats['min_price']
-                self.sensor_states[ENTITY_MAX_PRICE_TOMORROW] = tomorrow_stats['max_price']
-                
-                # Tomorrow min/max price attributes
-                if tomorrow_stats['min_record']:
-                    min_rec = tomorrow_stats['min_record']
-                    self.sensor_attributes[ENTITY_MIN_PRICE_TOMORROW] = {
-                        'available': True,
-                        'time': format_local_time(min_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
-                        'period': min_rec.get('period'),
-                        'period_start': format_local_time(min_rec.get('deliveryStart'), '%H:%M', self.hass),
-                        'period_end': format_local_time(min_rec.get('deliveryEnd'), '%H:%M', self.hass),
-                    }
-                else:
-                    self.sensor_attributes[ENTITY_MIN_PRICE_TOMORROW] = {
-                        'available': False,
-                    }
-                
-                if tomorrow_stats['max_record']:
-                    max_rec = tomorrow_stats['max_record']
-                    self.sensor_attributes[ENTITY_MAX_PRICE_TOMORROW] = {
-                        'available': True,
-                        'time': format_local_time(max_rec.get('deliveryStart'), '%d.%m.%Y %H:%M', self.hass),
-                        'period': max_rec.get('period'),
-                        'period_start': format_local_time(max_rec.get('deliveryStart'), '%H:%M', self.hass),
-                        'period_end': format_local_time(max_rec.get('deliveryEnd'), '%H:%M', self.hass),
-                    }
-                else:
-                    self.sensor_attributes[ENTITY_MAX_PRICE_TOMORROW] = {
-                        'available': False,
-                    }
-                
-                # Current price - use local timezone
-                current_local_time = self._get_current_local_time()
-                current_hour = current_local_time.replace(minute=0, second=0, microsecond=0)
-                LOGGER.debug(f"Looking for current price at local time: {current_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')}, current_hour: {current_hour.strftime('%H:%M')}")
-                current_record = None
-                for record in data:
-                    try:
-                        # Parse UTC time from API and convert to local timezone
-                        utc_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
-                        try:
-                            import zoneinfo
-                            ha_timezone = self.hass.config.time_zone
-                            tz = zoneinfo.ZoneInfo(ha_timezone)
-                            local_start = utc_start.astimezone(tz)
-                        except ImportError:
-                            # Fallback
-                            local_start = utc_start + timedelta(hours=1)
-                        
-                        # Compare hours (ignore minutes/seconds)
-                        local_start_hour = local_start.replace(minute=0, second=0, microsecond=0)
-                        if local_start_hour == current_hour:
-                            current_record = record
-                            LOGGER.debug(f"Found current price: {record['price']} EUR/MWh for time slot {local_start.strftime('%H:%M')}")
-                            break
-                    except Exception as e:
-                        LOGGER.debug(f"Error parsing delivery time: {e}")
-                        continue
-                
-                if not current_record:
-                    LOGGER.warning(f"No current price found for {current_hour.strftime('%H:%M')}")
-                
-                self.sensor_states[ENTITY_CURRENT_PRICE] = current_record['price'] if current_record else None
-                
-                # Calculate overall statistics for current price attributes
-                all_stats = calculate_price_statistics(data)
-                
-                # Current price attributes
-                if current_record:
-                    self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
-                        'period': current_record.get('period'),
-                        'period_start': format_local_time(current_record.get('deliveryStart'), '%H:%M', self.hass),
-                        'period_end': format_local_time(current_record.get('deliveryEnd'), '%H:%M', self.hass),
-                        'total_records': len(data),
-                        'today_average': today_stats['avg_price'],
-                        'tomorrow_average': tomorrow_stats['avg_price'],
-                        'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
-                    }
-                else:
-                    self.sensor_attributes[ENTITY_CURRENT_PRICE] = {
-                        'total_records': len(data),
-                        'today_average': today_stats['avg_price'],
-                        'tomorrow_average': tomorrow_stats['avg_price'],
-                        'price_spread': round(all_stats['max_price'] - all_stats['min_price'], 2) if all_stats['max_price'] and all_stats['min_price'] else None,
-                    }
-                
-                # Prices - create detailed attributes like in original integration
-                # Process TODAY data
-                today_period_data = []
-                today_valid_records = [record for record in self.price_data['today_data'] 
-                                      if record.get('price') is not None and record.get('deliveryStart')]
-                today_valid_records.sort(key=lambda x: x.get('deliveryStart', ''))
-                
-                for record in today_valid_records:
-                    try:
-                        delivery_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
-                        
-                        # Convert to local timezone
-                        try:
-                            import zoneinfo
-                            ha_timezone = self.hass.config.time_zone
-                            tz = zoneinfo.ZoneInfo(ha_timezone)
-                            delivery_local = delivery_start.astimezone(tz)
-                        except ImportError:
-                            delivery_local = delivery_start + timedelta(hours=1)
-                        
-                        period_entry = {
-                            'time': record['deliveryStart'],  # ISO format for graphs
-                            'time_local': delivery_local.strftime('%Y-%m-%d %H:%M:%S'),
-                            'price': record['price'],
-                            'period': record.get('period'),
-                            'period_start': record.get('HourStartCET'),
-                            'period_end': record.get('HourEndCET'),
-                            'date': record.get('deliveryDayCET'),
-                            'day_name': delivery_local.strftime('%A'),
-                            'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
-                            'timestamp': int(delivery_start.timestamp() * 1000)  # For ApexCharts
-                        }
-                        today_period_data.append(period_entry)
-                    except Exception as e:
-                        LOGGER.debug(f"Error processing today hourly record: {e}")
-                        continue
-                
-                today_prices_list = [entry['price'] for entry in today_period_data]
-                today_timestamps_list = [entry['time'] for entry in today_period_data]
-                today_labels_list = [entry['period_label'] for entry in today_period_data]
-                
-                self.sensor_states[ENTITY_PRICES_TODAY] = len(today_valid_records)
-                self.sensor_attributes[ENTITY_PRICES_TODAY] = {
-                    'period_data': today_period_data,
-                    'periods': len(today_period_data),
-                    'date_range': today.strftime('%Y-%m-%d'),
-                    'prices_list': today_prices_list,
-                    'timestamps_list': today_timestamps_list,
-                    'labels_list': today_labels_list,
-                    'min_price': min(today_prices_list) if today_prices_list else None,
-                    'max_price': max(today_prices_list) if today_prices_list else None,
-                    'avg_price': round(sum(today_prices_list) / len(today_prices_list), 2) if today_prices_list else None
-                }
-                
-                # Process TOMORROW data
-                tomorrow_period_data = []
-                tomorrow_valid_records = [record for record in self.price_data['tomorrow_data']
-                                         if record.get('price') is not None and record.get('deliveryStart')]
-                tomorrow_valid_records.sort(key=lambda x: x.get('deliveryStart', ''))
-                
-                for record in tomorrow_valid_records:
-                    try:
-                        delivery_start = datetime.fromisoformat(record['deliveryStart'].replace('Z', '+00:00'))
-                        
-                        # Convert to local timezone
-                        try:
-                            import zoneinfo
-                            ha_timezone = self.hass.config.time_zone
-                            tz = zoneinfo.ZoneInfo(ha_timezone)
-                            delivery_local = delivery_start.astimezone(tz)
-                        except ImportError:
-                            delivery_local = delivery_start + timedelta(hours=1)
-                        
-                        period_entry = {
-                            'time': record['deliveryStart'],
-                            'time_local': delivery_local.strftime('%Y-%m-%d %H:%M:%S'),
-                            'price': record['price'],
-                            'period': record.get('period'),
-                            'period_start': record.get('HourStartCET'),
-                            'period_end': record.get('HourEndCET'),
-                            'date': record.get('deliveryDayCET'),
-                            'day_name': delivery_local.strftime('%A'),
-                            'period_label': f"{record.get('HourStartCET', '')}-{record.get('HourEndCET', '')}",
-                            'timestamp': int(delivery_start.timestamp() * 1000)
-                        }
-                        tomorrow_period_data.append(period_entry)
-                    except Exception as e:
-                        LOGGER.debug(f"Error processing tomorrow hourly record: {e}")
-                        continue
-                
-                tomorrow_prices_list = [entry['price'] for entry in tomorrow_period_data]
-                tomorrow_timestamps_list = [entry['time'] for entry in tomorrow_period_data]
-                tomorrow_labels_list = [entry['period_label'] for entry in tomorrow_period_data]
-                
-                self.sensor_states[ENTITY_PRICES_TOMORROW] = len(tomorrow_valid_records)
-                self.sensor_attributes[ENTITY_PRICES_TOMORROW] = {
-                    'period_data': tomorrow_period_data,
-                    'periods': len(tomorrow_period_data),
-                    'date_range': tomorrow.strftime('%Y-%m-%d'),
-                    'prices_list': tomorrow_prices_list,
-                    'timestamps_list': tomorrow_timestamps_list,
-                    'labels_list': tomorrow_labels_list,
-                    'min_price': min(tomorrow_prices_list) if tomorrow_prices_list else None,
-                    'max_price': max(tomorrow_prices_list) if tomorrow_prices_list else None,
-                    'avg_price': round(sum(tomorrow_prices_list) / len(tomorrow_prices_list), 2) if tomorrow_prices_list else None
-                }
-                
-                LOGGER.info(f"Set ENTITY_PRICES_TODAY: {len(today_valid_records)} records in attributes")
-                LOGGER.info(f"Set ENTITY_PRICES_TOMORROW: {len(tomorrow_valid_records)} records in attributes")
-                
-                # HTML tables - pass dates to ensure correct formatting
-                html_today = self.generate_html_table_today(self.price_data['today_data'], today)
-                html_tomorrow = self.generate_html_table_tomorrow(self.price_data['tomorrow_data'], tomorrow)
-                
-                # Count valid records for today
-                today_valid_records = [record for record in self.price_data['today_data'] 
-                                      if record.get('price') is not None and record.get('deliveryStart')]
-                
-                # Count valid records for tomorrow  
-                tomorrow_valid_records = [record for record in self.price_data['tomorrow_data']
-                                         if record.get('price') is not None and record.get('deliveryStart')]
-                
-                # Set state to count of records
-                self.sensor_states[ENTITY_HTML_TABLE_TODAY] = len(today_valid_records)
-                self.sensor_states[ENTITY_HTML_TABLE_TOMORROW] = len(tomorrow_valid_records)
-                
-                # Set attributes - use local time
-                self.sensor_attributes[ENTITY_HTML_TABLE_TODAY] = {
-                    'html_table': html_today,
-                    'total_records': len(today_valid_records),
-                    'date': today.strftime('%d.%m.%Y'),
-                    'available': len(today_valid_records) > 0,
-                    'last_update': current_local_time.isoformat()
-                }
-                
-                self.sensor_attributes[ENTITY_HTML_TABLE_TOMORROW] = {
-                    'html_table': html_tomorrow,
-                    'total_records': len(tomorrow_valid_records),
-                    'date': tomorrow.strftime('%d.%m.%Y'),
-                    'available': len(tomorrow_valid_records) > 0,
-                    'last_update': current_local_time.isoformat()
-                }
-                
-                LOGGER.info(f"Set ENTITY_HTML_TABLE_TODAY: {len(html_today)} chars in attributes")
-                LOGGER.info(f"Set ENTITY_HTML_TABLE_TOMORROW: {len(html_tomorrow)} chars in attributes")
-                
-                LOGGER.info(f"Successfully processed {len(data)} price records")
+
+                await self._async_save_data()
             else:
-                self.sensor_states[ENTITY_CONNECTION_STATUS] = False
-                LOGGER.error("OKTE API: No data received from API")
-                
-                # Set API fetch error bit (bit 0)
-                self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 1
-                
-                # Schedule retry in 1 minute
-                self._schedule_retry()
-                
-                # Connection status attributes - disconnected
-                current_local_time = self._get_current_local_time()
-                self.sensor_attributes[ENTITY_CONNECTION_STATUS] = {
-                    'status': 'Disconnected',
-                    'status_description': 'Last data fetch failed',
-                    'last_attempt': current_local_time.isoformat(),
-                }
-                
+                LOGGER.error("OKTE API: No usable data received from API - keeping stored data")
+                self._handle_fetch_failure('Last data fetch failed')
+
         except Exception as e:
-            self.sensor_states[ENTITY_CONNECTION_STATUS] = False
             LOGGER.error(f"OKTE API: Error fetching data: {e}")
-            
-            # Set API fetch error bit (bit 0)
-            self.sensor_states[ENTITY_ERROR_CODE] = self.sensor_states[ENTITY_ERROR_CODE] | 1
-            
-            # Schedule retry in 1 minute
-            self._schedule_retry()
-            
-            # Connection status attributes - error
-            current_local_time = self._get_current_local_time()
-            self.sensor_attributes[ENTITY_CONNECTION_STATUS] = {
-                'status': 'Disconnected',
-                'status_description': f'Error during data fetch: {str(e)[:100]}',
-                'last_attempt': current_local_time.isoformat(),
-            }
+            try:
+                self._handle_fetch_failure(f'Error during data fetch: {str(e)[:100]}')
+            except Exception as e2:
+                LOGGER.error(f"OKTE API: Error handling fetch failure: {e2}")
 
     def _schedule_retry(self):
         """Schedule retry of API fetch in 1 minute if previous attempt failed."""
+        if self._closed:
+            return
         from homeassistant.helpers.event import async_call_later
         
         # Cancel existing retry timer if any
@@ -1563,6 +1769,9 @@ class OKTE_Master_Instance:
         self._is_running = True
 
         try:
+            # Move stored data to the current day if the date has changed (no API call)
+            self._roll_over_if_needed()
+
             # Update current price from cached data (no API call)
             await self.update_current_price()
             
@@ -1609,10 +1818,12 @@ class OKTE_Window_Instance:
         # Optimization: track when calculations are needed
         self._last_calculation_time = None  # Last time we did full calculation
         self._last_master_fetch_time = None  # Last fetch time from master device
+        self._last_master_data_version = None  # Last data version (incl. day rollover) from master device
         self._last_config_values = None  # Last configuration values for change detection
         
         # Debounce timer for config changes
         self._debounce_timer = None  # Timer handle for debounced calculation
+        self._closed = False
 
         # Entity IDs
         self.SENSOR_ENTITY_LOWEST_PRICE_WINDOW = None
@@ -1672,6 +1883,13 @@ class OKTE_Window_Instance:
         time_from: str = DEFAULT_TIME_FROM
         time_to: str = DEFAULT_TIME_TO
 
+    def async_shutdown(self):
+        """Cancel pending timers (called when the config entry is unloaded)."""
+        self._closed = True
+        if self._debounce_timer is not None:
+            self._debounce_timer()
+            self._debounce_timer = None
+
     def schedule_calculation(self, delay: float = None):
         """Schedule calculation with debounce to prevent multiple rapid recalculations.
         
@@ -1680,6 +1898,9 @@ class OKTE_Window_Instance:
         """
         from homeassistant.helpers.event import async_call_later
         from .const import CALCULATION_DEBOUNCE_DELAY
+
+        if self._closed:
+            return
         
         if delay is None:
             delay = CALCULATION_DEBOUNCE_DELAY
@@ -1707,33 +1928,40 @@ class OKTE_Window_Instance:
         except Exception as e:
             LOGGER.error(f"Error during System Started: {e}")
 
+    def _get_master_instance(self):
+        """Return the instance of the loaded Master config entry, or None."""
+        from homeassistant.config_entries import ConfigEntryState
+
+        master_entry_id = self.settings.master_device
+        if not master_entry_id:
+            return None
+        master_entry = self.hass.config_entries.async_get_entry(master_entry_id)
+        if (
+            master_entry is None
+            or master_entry.domain != DOMAIN
+            or master_entry.state is not ConfigEntryState.LOADED
+        ):
+            return None
+        runtime_data = getattr(master_entry, 'runtime_data', None)
+        return runtime_data.instance if runtime_data else None
+
     def get_master_price_data(self):
         """Get price data from master device."""
         try:
             if not self.settings.master_device:
                 LOGGER.error("Master device not configured")
                 return None
-            
-            # Find master device entry
-            master_entry_id = self.settings.master_device
-            LOGGER.debug(f"Looking for master device: {master_entry_id}")
-            LOGGER.debug(f"Available DOMAIN entries: {list(self.hass.data.get(DOMAIN, {}).keys())}")
-            
-            if DOMAIN in self.hass.data and master_entry_id in self.hass.data[DOMAIN]:
-                master_instance = self.hass.data[DOMAIN][master_entry_id].get("instance")
-                if master_instance:
-                    price_data = master_instance.price_data
-                    LOGGER.debug(f"Found master price_data with keys: {list(price_data.keys())}")
-                    LOGGER.debug(f"Today data records: {len(price_data.get('today_data', []))}")
-                    LOGGER.debug(f"Tomorrow data records: {len(price_data.get('tomorrow_data', []))}")
-                    return price_data
-                else:
-                    LOGGER.error(f"Master instance not found in entry {master_entry_id}")
-            else:
-                LOGGER.error(f"Master device {master_entry_id} not found in hass.data")
-            
-            return None
-            
+
+            master_instance = self._get_master_instance()
+            if master_instance is None:
+                LOGGER.error(f"Master device {self.settings.master_device} is not loaded")
+                return None
+
+            price_data = master_instance.price_data
+            LOGGER.debug(f"Today data records: {len(price_data.get('today_data', []))}")
+            LOGGER.debug(f"Tomorrow data records: {len(price_data.get('tomorrow_data', []))}")
+            return price_data
+
         except Exception as e:
             LOGGER.error(f"Error getting master price data: {e}", exc_info=True)
             return None
@@ -1741,15 +1969,8 @@ class OKTE_Window_Instance:
     def is_master_available(self):
         """Check if master device is available."""
         try:
-            if not self.settings.master_device:
-                return False
-            
-            master_entry_id = self.settings.master_device
-            if DOMAIN in self.hass.data and master_entry_id in self.hass.data[DOMAIN]:
-                return True
-            
-            return False
-            
+            return self._get_master_instance() is not None
+
         except Exception as e:
             LOGGER.error(f"Error checking master availability: {e}")
             return False
@@ -1813,6 +2034,7 @@ class OKTE_Window_Instance:
             
             # Get master's last fetch time
             master_fetch_time = price_data.get('last_fetch')
+            master_data_version = price_data.get('data_version')
             
             # Check if full calculation is needed
             need_calculation = False
@@ -1824,10 +2046,11 @@ class OKTE_Window_Instance:
                 reason.append("first run")
             
             # New data from master API
-            elif master_fetch_time and master_fetch_time != self._last_master_fetch_time:
+            elif (master_fetch_time and master_fetch_time != self._last_master_fetch_time) or master_data_version != self._last_master_data_version:
                 need_calculation = True
-                reason.append("new API data")
+                reason.append("new master data")
                 self._last_master_fetch_time = master_fetch_time
+                self._last_master_data_version = master_data_version
             
             # Configuration changed
             elif current_config != self._last_config_values:

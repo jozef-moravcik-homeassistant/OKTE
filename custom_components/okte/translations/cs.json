@@ -1,0 +1,214 @@
+{
+  "config": {
+    "step": {
+      "master_parameters": {
+        "title": "OKTE Master zařízení",
+        "description": "Konfigurace Master zařízení pro stahování dat z API",
+        "data": {
+          "include_device_name_in_entity": "Před název entit vložit 'OKTE -'",
+          "fetch_time": "Čas denního stahování (HH:MM)"
+        }
+      },
+      "window_parameters": {
+        "title": "OKTE Calculator zařízení",
+        "description": "Konfigurace OKTE Calculator zařízení pro výpočet časových oken",
+        "data": {
+          "include_device_name_in_entity": "Před název entit vložit název zařízení"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Zařízení je již nakonfigurováno",
+      "no_master_device": "Není nakonfigurováno žádné Master zařízení. Nejprve přidejte Master zařízení."
+    }
+  },
+  "options": {
+    "step": {
+      "master_parameters": {
+        "title": "Nastavení OKTE Master zařízení",
+        "description": "Konfigurace nastavení Master zařízení",
+        "data": {
+          "include_device_name_in_entity": "Před název entit vložit 'OKTE -'",
+          "fetch_time": "Čas denního stahování (HH:MM)"
+        }
+      },
+      "window_parameters": {
+        "title": "Nastavení OKTE Calculator zařízení",
+        "description": "Konfigurace nastavení OKTE Calculator zařízení",
+        "data": {
+          "include_device_name_in_entity": "Před název entit vložit název zařízení"
+        }
+      }
+    }
+  },
+  "services": {
+    "system_started": {
+      "name": "Systém spuštěn",
+      "description": "Inicializace systému"
+    },
+    "fetch_data": {
+      "name": "Stáhnout data",
+      "description": "Ruční stažení cenových dat z API"
+    }
+  },
+  "selector": {
+    "device_type": {
+      "options": {
+        "master": "Master (stahování dat z API)",
+        "window": "OKTE Calculator (výpočet časových oken)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "connection_status": {
+        "name": "Stav připojení"
+      },
+      "last_update": {
+        "name": "Poslední aktualizace"
+      },
+      "data_count": {
+        "name": "Počet záznamů"
+      },
+      "error_code": {
+        "name": "Chybový kód"
+      },
+      "current_price": {
+        "name": "Aktuální cena"
+      },
+      "average_price_today": {
+        "name": "Průměrná cena dnes"
+      },
+      "min_price_today": {
+        "name": "Minimální cena dnes"
+      },
+      "max_price_today": {
+        "name": "Maximální cena dnes"
+      },
+      "average_price_tomorrow": {
+        "name": "Průměrná cena zítra"
+      },
+      "min_price_tomorrow": {
+        "name": "Minimální cena zítra"
+      },
+      "max_price_tomorrow": {
+        "name": "Maximální cena zítra"
+      },
+      "prices_today": {
+        "name": "Ceny dnes"
+      },
+      "prices_tomorrow": {
+        "name": "Ceny zítra"
+      },
+      "html_table_today": {
+        "name": "HTML tabulka dnes"
+      },
+      "html_table_tomorrow": {
+        "name": "HTML tabulka zítra"
+      },
+      "lowest_price_window": {
+        "name": "Okno nejnižší ceny"
+      },
+      "lowest_price_window_today": {
+        "name": "Okno nejnižší ceny dnes"
+      },
+      "lowest_price_window_tomorrow": {
+        "name": "Okno nejnižší ceny zítra"
+      },
+      "highest_price_window": {
+        "name": "Okno nejvyšší ceny"
+      },
+      "highest_price_window_today": {
+        "name": "Okno nejvyšší ceny dnes"
+      },
+      "highest_price_window_tomorrow": {
+        "name": "Okno nejvyšší ceny zítra"
+      },
+      "lowest_price_window_size": {
+        "name": "Nejnižší ceny - Velikost okna (čas)"
+      },
+      "highest_price_window_size": {
+        "name": "Nejvyšší ceny - Velikost okna (čas)"
+      },
+      "lowest_price_search_window_size": {
+        "name": "Nejnižší ceny - Velikost vyhledávacího okna"
+      },
+      "highest_price_search_window_size": {
+        "name": "Nejvyšší ceny - Velikost vyhledávacího okna"
+      }
+    },
+    "button": {
+      "update_data": {
+        "name": "Aktualizovat údaje"
+      }
+    },
+    "binary_sensor": {
+      "detector_lowest_price": {
+        "name": "Detektor nejnižší ceny"
+      },
+      "detector_lowest_price_today": {
+        "name": "Detektor nejnižší ceny dnes"
+      },
+      "detector_highest_price": {
+        "name": "Detektor nejvyšší ceny"
+      },
+      "detector_highest_price_today": {
+        "name": "Detektor nejvyšší ceny dnes"
+      }
+    },
+    "time": {
+      "lowest_price_time_from": {
+        "name": "Nejnižší ceny - Časový rozsah od"
+      },
+      "lowest_price_time_to": {
+        "name": "Nejnižší ceny - Časový rozsah do"
+      },
+      "highest_price_time_from": {
+        "name": "Nejvyšší ceny - Časový rozsah od"
+      },
+      "highest_price_time_to": {
+        "name": "Nejvyšší ceny - Časový rozsah do"
+      },
+      "lowest_price_window_from_as_day_start_prefix": {
+        "name": "Nejnižší ceny - Začátek vyhledávacího okna oddálit po východu slunce o:"
+      },
+      "lowest_price_window_to_as_day_end_prefix": {
+        "name": "Nejnižší ceny - Konec vyhledávacího okna zkrátit před západem slunce o:"
+      },
+      "highest_price_window_from_as_day_start_prefix": {
+        "name": "Nejvyšší ceny - Začátek vyhledávacího okna oddálit po východu slunce o:"
+      },
+      "highest_price_window_to_as_day_end_prefix": {
+        "name": "Nejvyšší ceny - Konec vyhledávacího okna zkrátit před západem slunce o:"
+      }
+    },
+    "switch": {
+      "lowest_price_window_from_as_day_start": {
+        "name": "Časový rozsah pro nejnižší ceny 'od' bude východ slunce"
+      },
+      "lowest_price_window_to_as_day_end": {
+        "name": "Časový rozsah pro nejnižší ceny 'do' bude západ slunce"
+      },
+      "highest_price_window_from_as_day_start": {
+        "name": "Časový rozsah pro nejvyšší ceny 'od' bude východ slunce"
+      },
+      "highest_price_window_to_as_day_end": {
+        "name": "Časový rozsah pro nejvyšší ceny 'do' bude západ slunce"
+      }
+    },
+    "number": {
+      "lowest_price_window_size": {
+        "name": "Nejnižší ceny - Velikost okna"
+      },
+      "highest_price_window_size": {
+        "name": "Nejvyšší ceny - Velikost okna"
+      }
+    }
+  },
+  "issues": {
+    "recorder_exclude_recommendation": {
+      "title": "Vyloučte velké OKTE entity z historie recorderu",
+      "description": "Některé OKTE entity obsahují velká data (HTML tabulky, seznamy cen) přesahující 16 KB, což může způsobit problémy s výkonem databáze.\n\nTyto entity jsou stále viditelné v UI, ale neměly by se ukládat do historie databáze:\n\n{entities}\n\nPřidejte tuto konfiguraci do vašeho configuration.yaml:\n\n```yaml\n{yaml_config}\n```\n\nPoté restartujte Home Assistant pro aplikování změn."
+    }
+  }
+}

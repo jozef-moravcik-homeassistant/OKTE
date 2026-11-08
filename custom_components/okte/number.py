@@ -43,15 +43,18 @@ async def async_setup_entry(
         LOGGER.info(f"Skipping number entities - not a Calculator device")
         return
     
-    # Get instance from hass.data
-    instance = hass.data[DOMAIN][config_entry.entry_id]["instance"]
+    # Get instance from runtime data
+    instance = config_entry.runtime_data.instance
     
     LOGGER.info(f"Creating window size number entities")
     
     # Create only window size entities (time is now handled by time.py)
+    from .sensor import _load_translations
+    translations = await _load_translations(hass)
+    
     numbers = [
-        OkteNumberEntity(hass, config_entry, instance, ENTITY_LOWEST_WINDOW_SIZE),
-        OkteNumberEntity(hass, config_entry, instance, ENTITY_HIGHEST_WINDOW_SIZE),
+        OkteNumberEntity(hass, config_entry, instance, ENTITY_LOWEST_WINDOW_SIZE, translations),
+        OkteNumberEntity(hass, config_entry, instance, ENTITY_HIGHEST_WINDOW_SIZE, translations),
     ]
     
     LOGGER.info(f"Adding {len(numbers)} number entities")
@@ -62,8 +65,9 @@ async def async_setup_entry(
 class OkteNumberEntity(NumberEntity):
     """Number entity for window size settings."""
     
-    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str):
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str, translations: dict | None = None):
         """Initialize the number entity."""
+        self._translations = translations or {}
         self.hass = hass
         self.config_entry = config_entry
         self.instance = instance
@@ -175,19 +179,15 @@ class OkteNumberEntity(NumberEntity):
     @property
     def name(self) -> str:
         """Return the name - dynamically generated with device prefix."""
-        # Base names
-        names = {
-            ENTITY_LOWEST_WINDOW_SIZE: "Najnižšie ceny - Veľkosť okna",
-            ENTITY_HIGHEST_WINDOW_SIZE: "Najvyššie ceny - Veľkosť okna",
-        }
-        translated_name = names.get(self._entity_id_key, self._entity_id_key)
+        translated_name = (
+            self._translations.get("entity", {}).get("number", {}).get(self._entity_id_key, {}).get("name")
+            or self._entity_id_key
+        )
         
         # Apply prefix based on checkbox setting
         if self.instance.settings.include_device_name_in_entity:
             # Calculator: "OKTE - {device_label} - {translated_name}"
-            from homeassistant.helpers import device_registry as dr
-            device_registry = dr.async_get(self.hass)
-            device_entry = device_registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+            device_entry = self.device_entry
             
             if device_entry and device_entry.name_by_user:
                 device_label = device_entry.name_by_user

@@ -56,6 +56,31 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_DEVICE_TYPE] = DEVICE_TYPE_CALCULATOR
             return await self.async_step_window_parameters(user_input)
 
+    async def async_step_import(self, import_data=None):
+        """Handle import of the Master device from configuration.yaml."""
+        from datetime import time as dt_time
+
+        import_data = dict(import_data or {})
+        fetch_time = import_data.get(CONF_FETCH_TIME, DEFAULT_FETCH_TIME)
+        if isinstance(fetch_time, dt_time):
+            fetch_time = f"{fetch_time.hour:02d}:{fetch_time.minute:02d}"
+
+        await self.async_set_unique_id(f"{DOMAIN}_master")
+        self._abort_if_unique_id_configured()
+
+        device_name = "OKTE Master"
+        return self.async_create_entry(
+            title=device_name,
+            data={
+                CONF_DEVICE_TYPE: DEVICE_TYPE_MASTER,
+                CONF_DEVICE_NAME: device_name,
+                CONF_INCLUDE_DEVICE_NAME_IN_ENTITY: import_data.get(
+                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY
+                ),
+                CONF_FETCH_TIME: fetch_time,
+            },
+        )
+
     async def async_step_master_parameters(self, user_input=None):
         """Handle Master device parameters."""
         errors = {}
@@ -224,8 +249,8 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
                 # Convert to string HH:MM format (seconds always 0)
                 user_input[CONF_FETCH_TIME] = f"{time_obj.hour:02d}:{time_obj.minute:02d}"
             
-            self._data.update(user_input)
-            return self.async_create_entry(title="", data=self._data)
+            # Keep stored entity values (window sizes, times, switches) - merge instead of replace
+            return self.async_create_entry(title="", data={**self.config_entry.options, **user_input})
 
         # Get current values
         current_include_device_name = self.config_entry.options.get(
@@ -269,8 +294,8 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
-            self._data.update(user_input)
-            return self.async_create_entry(title="", data=self._data)
+            # Keep stored entity values (window sizes, times, switches) - merge instead of replace
+            return self.async_create_entry(title="", data={**self.config_entry.options, **user_input})
 
         # Get current values
         current_include_device_name = self.config_entry.options.get(

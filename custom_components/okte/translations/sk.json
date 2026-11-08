@@ -1,41 +1,24 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Nastavenie OKTE zariadenia",
-        "description": "Vyberte typ zariadenia",
-        "data": {
-          "device_type": "Typ zariadenia"
-        }
-      },
       "master_parameters": {
         "title": "OKTE Master zariadenie",
         "description": "Konfigurácia Master zariadenia pre sťahovanie dát z API",
         "data": {
           "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
-          "fetch_time": "Čas denného sťahovania (HH:MM)",
-          "fetch_days": "Počet dní na stiahnutie"
+          "fetch_time": "Čas denného sťahovania (HH:MM)"
         }
       },
       "window_parameters": {
         "title": "OKTE Calculator zariadenie",
         "description": "Konfigurácia OKTE Calculator zariadenia pre výpočet časových okien",
         "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia",
-          "window_size": "Veľkosť okna (hodiny)",
-          "time_from": "Časový rozsah od (HH:MM)",
-          "time_to": "Časový rozsah do (HH:MM)"
+          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia"
         }
       }
     },
-    "error": {
-      "cannot_connect": "Chyba pripojenia",
-      "invalid_time": "Neplatný formát času (použite HH:MM)",
-      "unknown": "Neočakávaná chyba"
-    },
     "abort": {
       "already_configured": "Zariadenie je už nakonfigurované",
-      "already_configured_master": "Master zariadenie je už nakonfigurované. Je možné mať len jedno Master zariadenie.",
       "no_master_device": "Nie je nakonfigurované žiadne Master zariadenie. Najprv pridajte Master zariadenie."
     }
   },
@@ -46,18 +29,14 @@
         "description": "Konfigurácia nastavení Master zariadenia",
         "data": {
           "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
-          "fetch_time": "Čas denného sťahovania (HH:MM)",
-          "fetch_days": "Počet dní na stiahnutie"
+          "fetch_time": "Čas denného sťahovania (HH:MM)"
         }
       },
       "window_parameters": {
         "title": "Nastavenia OKTE Calculator zariadenia",
         "description": "Konfigurácia nastavení OKTE Calculator zariadenia",
         "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia",
-          "window_size": "Veľkosť okna (hodiny)",
-          "time_from": "Časový rozsah od (HH:MM)",
-          "time_to": "Časový rozsah do (HH:MM)"
+          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia"
         }
       }
     }
@@ -175,6 +154,54 @@
       },
       "detector_highest_price_today": {
         "name": "Detektor najvyššej ceny dnes"
+      }
+    },
+    "time": {
+      "lowest_price_time_from": {
+        "name": "Najnižšie ceny - Časový rozsah od"
+      },
+      "lowest_price_time_to": {
+        "name": "Najnižšie ceny - Časový rozsah do"
+      },
+      "highest_price_time_from": {
+        "name": "Najvyššie ceny - Časový rozsah od"
+      },
+      "highest_price_time_to": {
+        "name": "Najvyššie ceny - Časový rozsah do"
+      },
+      "lowest_price_window_from_as_day_start_prefix": {
+        "name": "Najnižšie ceny - Začiatok vyhľadávacieho okna oneskoriť po východe slnka o:"
+      },
+      "lowest_price_window_to_as_day_end_prefix": {
+        "name": "Najnižšie ceny - Koniec vyhľadávacieho okna skrátiť pred západom slnka o:"
+      },
+      "highest_price_window_from_as_day_start_prefix": {
+        "name": "Najvyššie ceny - Začiatok vyhľadávacieho okna oneskoriť po východe slnka o:"
+      },
+      "highest_price_window_to_as_day_end_prefix": {
+        "name": "Najvyššie ceny - Koniec vyhľadávacieho okna skrátiť pred západom slnka o:"
+      }
+    },
+    "switch": {
+      "lowest_price_window_from_as_day_start": {
+        "name": "Časový rozsah pre najnižšie ceny 'od' bude východ slnka"
+      },
+      "lowest_price_window_to_as_day_end": {
+        "name": "Časový rozsah pre najnižšie ceny 'do' bude západ slnka"
+      },
+      "highest_price_window_from_as_day_start": {
+        "name": "Časový rozsah pre najvyššie ceny 'od' bude východ slnka"
+      },
+      "highest_price_window_to_as_day_end": {
+        "name": "Časový rozsah pre najvyššie ceny 'do' bude západ slnka"
+      }
+    },
+    "number": {
+      "lowest_price_window_size": {
+        "name": "Najnižšie ceny - Veľkosť okna"
+      },
+      "highest_price_window_size": {
+        "name": "Najvyššie ceny - Veľkosť okna"
       }
     }
   },

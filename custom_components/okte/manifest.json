@@ -1,6 +1,7 @@
 {
   "domain": "okte",
   "name": "OKTE - Slovak Energy Market",
+  "after_dependencies": ["sun"],
   "codeowners": ["@jozef-moravcik-homeassistant"],
   "config_flow": true,
   "dependencies": [],
@@ -8,7 +9,7 @@
   "integration_type": "device",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/jozef-moravcik-homeassistant/okte/issues",
-  "loggers": ["okte"],
+  "loggers": ["custom_components.okte"],
   "requirements": [],
-  "version": "1.01.02"
+  "version": "1.01.03"
 }

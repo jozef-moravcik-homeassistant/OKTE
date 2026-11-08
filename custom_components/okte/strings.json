@@ -1,41 +1,24 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "OKTE Device Setup",
-        "description": "Select device type",
-        "data": {
-          "device_type": "Device Type"
-        }
-      },
       "master_parameters": {
         "title": "OKTE Master Device",
         "description": "Configure Master device for API data fetching",
         "data": {
           "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
-          "fetch_time": "Daily fetch time (HH:MM)",
-          "fetch_days": "Number of days to fetch"
+          "fetch_time": "Daily fetch time (HH:MM)"
         }
       },
       "window_parameters": {
         "title": "OKTE Calculator Device",
         "description": "Configure OKTE Calculator device for time window calculations",
         "data": {
-          "include_device_name_in_entity": "Insert device name before entity name",
-          "window_size": "Window size (hours)",
-          "time_from": "Time range from (HH:MM)",
-          "time_to": "Time range to (HH:MM)"
+          "include_device_name_in_entity": "Insert device name before entity name"
         }
       }
     },
-    "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_time": "Invalid time format (use HH:MM)",
-      "unknown": "Unexpected error"
-    },
     "abort": {
       "already_configured": "Device is already configured",
-      "already_configured_master": "Master device is already configured. Only one Master device is allowed.",
       "no_master_device": "No Master device configured. Please add a Master device first."
     }
   },
@@ -46,18 +29,14 @@
         "description": "Configure Master device settings",
         "data": {
           "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
-          "fetch_time": "Daily fetch time (HH:MM)",
-          "fetch_days": "Number of days to fetch"
+          "fetch_time": "Daily fetch time (HH:MM)"
         }
       },
       "window_parameters": {
         "title": "OKTE Calculator Device Settings",
         "description": "Configure OKTE Calculator device settings",
         "data": {
-          "include_device_name_in_entity": "Insert device name before entity name",
-          "window_size": "Window size (hours)",
-          "time_from": "Time range from (HH:MM)",
-          "time_to": "Time range to (HH:MM)"
+          "include_device_name_in_entity": "Insert device name before entity name"
         }
       }
     }
@@ -90,6 +69,9 @@
       },
       "data_count": {
         "name": "Data Count"
+      },
+      "error_code": {
+        "name": "Error Code"
       },
       "current_price": {
         "name": "Current Price"
@@ -172,6 +154,54 @@
       },
       "detector_highest_price_today": {
         "name": "Detector Highest Price Today"
+      }
+    },
+    "time": {
+      "lowest_price_time_from": {
+        "name": "Lowest prices - Time range from"
+      },
+      "lowest_price_time_to": {
+        "name": "Lowest prices - Time range to"
+      },
+      "highest_price_time_from": {
+        "name": "Highest prices - Time range from"
+      },
+      "highest_price_time_to": {
+        "name": "Highest prices - Time range to"
+      },
+      "lowest_price_window_from_as_day_start_prefix": {
+        "name": "Lowest prices - Delay search window start after sunrise by:"
+      },
+      "lowest_price_window_to_as_day_end_prefix": {
+        "name": "Lowest prices - Shorten search window end before sunset by:"
+      },
+      "highest_price_window_from_as_day_start_prefix": {
+        "name": "Highest prices - Delay search window start after sunrise by:"
+      },
+      "highest_price_window_to_as_day_end_prefix": {
+        "name": "Highest prices - Shorten search window end before sunset by:"
+      }
+    },
+    "switch": {
+      "lowest_price_window_from_as_day_start": {
+        "name": "Time range for lowest prices 'from' will be sunrise"
+      },
+      "lowest_price_window_to_as_day_end": {
+        "name": "Time range for lowest prices 'to' will be sunset"
+      },
+      "highest_price_window_from_as_day_start": {
+        "name": "Time range for highest prices 'from' will be sunrise"
+      },
+      "highest_price_window_to_as_day_end": {
+        "name": "Time range for highest prices 'to' will be sunset"
+      }
+    },
+    "number": {
+      "lowest_price_window_size": {
+        "name": "Lowest prices - Window size"
+      },
+      "highest_price_window_size": {
+        "name": "Highest prices - Window size"
       }
     }
   },

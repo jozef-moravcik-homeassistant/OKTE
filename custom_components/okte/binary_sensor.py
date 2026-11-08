@@ -38,7 +38,7 @@ async def _load_translations(hass: HomeAssistant) -> dict:
             if os.path.exists(translations_path):
                 with open(translations_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-        except:
+        except Exception:
             pass
         return {}
     
@@ -50,8 +50,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up binary sensor entities."""
-    instance = hass.data[DOMAIN][entry.entry_id]["instance"]
-    device_type = hass.data[DOMAIN][entry.entry_id]["device_type"]
+    instance = entry.runtime_data.instance
+    device_type = entry.runtime_data.device_type
     
     translations = await _load_translations(hass)
 
@@ -139,9 +139,7 @@ class BinarySensorEntityDefinition(BinarySensorEntity):
             else:
                 # Calculator: "OKTE - {device_label} - {translated_name}"
                 # Get device label from Home Assistant (the name user sets in native HA dialog)
-                from homeassistant.helpers import device_registry as dr
-                device_registry = dr.async_get(self.hass)
-                device_entry = device_registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+                device_entry = self.device_entry
                 
                 if device_entry and device_entry.name_by_user:
                     device_label = device_entry.name_by_user

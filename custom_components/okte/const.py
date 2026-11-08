@@ -6,6 +6,9 @@
 
 """ Constants for the OKTE Integration."""
 
+from dataclasses import dataclass, field
+from typing import Any
+
 from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNKNOWN, STATE_UNAVAILABLE, STATE_OK, STATE_PROBLEM
 
 # Custom states for window sensors
@@ -13,7 +16,7 @@ STATE_WINDOW_FOUND = "OK"
 STATE_WINDOW_NOT_FOUND = "NOT"
 
 DOMAIN = "okte"
-VERSION = "1.01.01"
+VERSION = "1.01.03"
 DOCUMENTATION_URL = "https://github.com/jozef-moravcik-homeassistant/okte"
 MANUFACTURER = "Jozef Moravcik"
 MODEL_MASTER = "OKTE Master"
@@ -196,6 +199,39 @@ ENTITY_LOWEST_AUTO_TIME_TO = "lowest_price_window_to_as_day_end"
 ENTITY_HIGHEST_AUTO_TIME_FROM = "highest_price_window_from_as_day_start"
 ENTITY_HIGHEST_AUTO_TIME_TO = "highest_price_window_to_as_day_end"
 
+# Window Device Settings - Time Entities (Prefix for Auto Day Start/End)
+# FROM prefix is added to the day start (sunrise), TO prefix is subtracted from the day end (sunset)
+ENTITY_LOWEST_AUTO_TIME_FROM_PREFIX = "lowest_price_window_from_as_day_start_prefix"
+ENTITY_LOWEST_AUTO_TIME_TO_PREFIX = "lowest_price_window_to_as_day_end_prefix"
+ENTITY_HIGHEST_AUTO_TIME_FROM_PREFIX = "highest_price_window_from_as_day_start_prefix"
+ENTITY_HIGHEST_AUTO_TIME_TO_PREFIX = "highest_price_window_to_as_day_end_prefix"
+
+# Mapping: time entity key -> its prefix entity key
+AUTO_TIME_PREFIX_KEYS = {
+    ENTITY_LOWEST_TIME_FROM: ENTITY_LOWEST_AUTO_TIME_FROM_PREFIX,
+    ENTITY_LOWEST_TIME_TO: ENTITY_LOWEST_AUTO_TIME_TO_PREFIX,
+    ENTITY_HIGHEST_TIME_FROM: ENTITY_HIGHEST_AUTO_TIME_FROM_PREFIX,
+    ENTITY_HIGHEST_TIME_TO: ENTITY_HIGHEST_AUTO_TIME_TO_PREFIX,
+}
+
+
+def apply_sun_prefix(sun_time, prefix, is_from):
+    """Apply prefix to sunrise/sunset time (both datetime.time, HH:MM).
+
+    is_from=True : day start + prefix (limited to 23:59)
+    is_from=False: day end - prefix (limited to 00:00)
+    """
+    from datetime import time as dt_time
+    if prefix is None:
+        return sun_time
+    sun_minutes = sun_time.hour * 60 + sun_time.minute
+    prefix_minutes = prefix.hour * 60 + prefix.minute
+    if is_from:
+        result = min(sun_minutes + prefix_minutes, 23 * 60 + 59)
+    else:
+        result = max(sun_minutes - prefix_minutes, 0)
+    return dt_time(result // 60, result % 60)
+
 ##############################################################################################################################
 # Default values of static parameters ########################################################################################
 ##############################################################################################################################
@@ -203,3 +239,16 @@ DEFAULT_FALLBACK_CHECK_INTERVAL = 15  # 15 seconds - for Master devices (fast cu
 DEFAULT_FALLBACK_CHECK_INTERVAL_CALCULATOR = 15  # 15 seconds - for Calculator devices (fast detector updates)
 DEBOUNCE_DELAY = 0.2  # seconds - it groups all changes within this time period (due to better performance)
 CALCULATION_DEBOUNCE_DELAY = 2.0  # seconds - delay for window calculations after config changes (prevents multiple recalculations during value adjustments)
+
+
+@dataclass
+class OkteRuntimeData:
+    """Runtime data stored in ConfigEntry.runtime_data."""
+
+    instance: Any
+    device_type: str
+    device_name: str
+    include_device_name_in_entity: bool
+    options: dict = field(default_factory=dict)  # Copy of entry.options used by update_listener for comparison
+    fetch_time: str | None = None  # Master only
+    master_device: str | None = None  # Calculator only
