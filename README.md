@@ -1,6 +1,6 @@
 # 🔌 OKTE - Slovak Energy Market Integration for Home Assistant
 
-[![Version](https://img.shields.io/badge/version-1.01.01-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
+[![Version](https://img.shields.io/badge/version-1.01.03-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -30,7 +30,7 @@
 ## 📑 Table of Contents
 
 1. [Installation](#-installation)
-   - [Via HACS](#via-hacs-recommended)
+   - [Via Marketplace](#via-hacs-recommended)
    - [Manual Installation](#manual-installation)
    - [Device Configuration](#device-configuration)
 2. [OKTE Master Device](#-okte-master-device)
@@ -51,11 +51,12 @@
 
 ## 🔧 Installation
 
-### Via HACS (Recommended)
+### Via Marketplace (Recommended)
 
-1. Open **HACS** in your Home Assistant
-2. Go to **Integrations**
-3. Click the **3 dots** menu in the top right corner
+1. Open **Marketplace** in your Home Assistant
+2. Search **okte** and click to **Install** button
+#### If you can't find okte in Marketplace, follow next steps ####
+3. Click the **3 dots** menu in the top right corner in **Marketplace**
 4. Select **Custom repositories**
 5. Add repository URL: `https://github.com/jozef-moravcik-homeassistant/okte`
 6. Category: **Integration**
@@ -91,9 +92,9 @@ The OKTE integration uses **two types of virtual devices**:
 ![OKTE Master Configuration](docs/images/en_device_okte_master_configuration.jpg)
 
 #### 🔢 Calculator Devices
-- Add **unlimited number** of Calculator devices
+- You can add **unlimited number** of Calculator devices
 - Each Calculator device is **independently configured**
-- Automatically numbered: Calculator 1, Calculator 2, Calculator 3, etc.
+- Calculators are automatically numbered: Calculator 1, Calculator 2, Calculator 3, etc.
 - Uses data from OKTE Master to find optimal price windows
 - Perfect for different automation scenarios (battery charging, heat pump operation, etc.)
 
@@ -143,7 +144,7 @@ The **OKTE Master** device is the core component that handles all communication 
 | **Add 'OKTE -' prefix to entity names** | ✅ Enabled | Adds "okte_" prefix to all entity IDs |
 | **Daily fetch time** | 14:00 | Time when data is automatically downloaded from OKTE API |
 
-> ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. Data is also automatically downloaded at 10, 60 and 120 seconds after midnight to update the data for the current day, but since in OKTE the data for the next day is only available after 13:00, with this midnight download only the current day is loaded, the next day only with the next download (default 14:00). In case of unsuccessful data download, for example due to an interrupted internet connection or a malfunction on the OKTE side, the integration will try to download the data every minute until it is successfully downloaded. This status is indicated by the sensor.okte_connection_status sensor and the error code is recorded in the sensor.okte_error_code sensor.
+> ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. At midnight, data for the following day is automatically moved to the current day, therefore, there is no need to download the data after midnight. Data for the following day will be added during the next scheduled download (default: 14:00). If a download fails—for example, due to an interrupted internet connection or an issue on the OKTE side—the integration will attempt to download the data every minute until it succeeds. This status is indicated by the `sensor.okte_connection_status` sensor, and any error code is recorded in the `sensor.okte_error_code` sensor. The data remains stored in the system even after an HA restart.
 
 ### Master Device Entities
 
@@ -253,9 +254,6 @@ The **Calculator** device uses data from the OKTE Master to find optimal time wi
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | **Insert device name before entity name** | ✅ Enabled | Adds device identifier to entity names |
-| **Window size** | 3 hours | Default size for price window calculations |
-| **Time range from** | 00:00 | Default start time for window search |
-| **Time range to** | 23:59 | Default end time for window search |
 
 ### Calculator Device Entities
 
@@ -323,16 +321,20 @@ These detectors automatically turn **ON** when the current time is within the ca
 | Entity ID Pattern | Type | Description | Default |
 |-------------------|------|-------------|---------|
 | `switch.okte_N_lowest_price_window_from_as_day_start` | Switch | Auto-set start time to sunrise | OFF |
-| `time.okte_N_lowest_price_time_from` | Time | Manual start time | 00:00 |
+| `time.okte_N_lowest_price_window_from_as_day_start_prefix` | Time | Delay in the start of the search window after sunrise | 00:00 |
+| `time.okte_N_lowest_price_time_from` | Time | Start time of the search window | 00:00 |
 | `switch.okte_N_lowest_price_window_to_as_day_end` | Switch | Auto-set end time to sunset | OFF |
-| `time.okte_N_lowest_price_time_to` | Time | Manual end time | 23:59 |
+| `time.okte_N_lowest_price_window_to_as_day_end_prefix` | Time | Shorten search window end before sunset by: | 00:00 |
+| `time.okte_N_lowest_price_time_to` | Time | End time of the search window | 23:59 |
 | `number.okte_N_lowest_price_window_size` | Number | Price window duration (hours) | 3 |
 
 **How Sunrise/Sunset Switches Work:**
 - ✅ **ON**: Time is automatically set to sunrise/sunset
-- ⬜ **OFF**: Manual time from `time` entity is used
+- If a delay after sunrise is set (e.g., 2:00), this duration is added to the sunrise time (e.g., 6:30), resulting in a later start for the search window (in our example, at 8:30).
+- If a setting is configured to shorten the search window before sunset (e.g., by 2 hours), and sunset occurs at 17:30, the search window will end at 15:30.
+- Delaying the start and shortening the end of the search window is particularly useful for scheduling the operation of large appliances, such as a heat pump, this is because, after sunrise, it takes some time for the power output from the PV system to become sufficient to operate the heat pump.
 
-> 🌅 **Example:** Enable sunrise switch to automatically search for lowest prices starting from sunrise each day
+- ⬜ **OFF**: The start and end times of the search window are entered manually.
 
 #### ⚙️ Control Entities - Highest Price Window
 
@@ -340,8 +342,10 @@ These detectors automatically turn **ON** when the current time is within the ca
 | Entity ID Pattern | Type | Description | Default |
 |-------------------|------|-------------|---------|
 | `switch.okte_N_highest_price_window_from_as_day_start` | Switch | Auto-set start time to sunrise | OFF |
+| `time.okte_N_highest_price_window_from_as_day_start_prefix` | Time | Delay in the start of the search window after sunrise | 00:00 |
 | `time.okte_N_highest_price_time_from` | Time | Manual start time | 00:00 |
 | `switch.okte_N_highest_price_window_to_as_day_end` | Switch | Auto-set end time to sunset | OFF |
+| `time.okte_N_highest_price_window_to_as_day_end_prefix` | Time | Shorten search window end before sunset by: | 00:00 |
 | `time.okte_N_highest_price_time_to` | Time | Manual end time | 23:59 |
 | `number.okte_N_highest_price_window_size` | Number | Price window duration (hours) | 3 |
 
@@ -355,7 +359,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_lowest_price
       - entity: binary_sensor.okte_1_detector_lowest_price_today
-      - entity: binary_sensor.okte_1_detector_lowest_price_tomorrow
       - entity: sensor.okte_1_lowest_price_window
       - entity: sensor.okte_1_lowest_price_window_today
       - entity: sensor.okte_1_lowest_price_window_tomorrow
@@ -384,7 +387,6 @@ cards:
     entities:
       - entity: binary_sensor.okte_1_detector_highest_price
       - entity: binary_sensor.okte_1_detector_highest_price_today
-      - entity: binary_sensor.okte_1_detector_highest_price_tomorrow
       - entity: sensor.okte_1_highest_price_window
       - entity: sensor.okte_1_highest_price_window_today
       - entity: sensor.okte_1_highest_price_window_tomorrow
@@ -436,10 +438,10 @@ recorder:
 
 | Entity | Data Size | Reason |
 |--------|-----------|--------|
-| `sensor.okte_prices_today` | ~16 KB | Contains 24-48 hours of detailed price data |
-| `sensor.okte_prices_tomorrow` | ~16 KB | Contains 24-48 hours of detailed price data |
-| `sensor.okte_html_table_today` | ~8 KB | Full HTML table with styling |
-| `sensor.okte_html_table_tomorrow` | ~8 KB | Full HTML table with styling |
+| `sensor.okte_prices_today` | ~64 KB | Contains 24-48 hours of detailed price data |
+| `sensor.okte_prices_tomorrow` | ~64 KB | Contains 24-48 hours of detailed price data |
+| `sensor.okte_html_table_today` | ~32 KB | Full HTML table with styling |
+| `sensor.okte_html_table_tomorrow` | ~32 KB | Full HTML table with styling |
 
 ### Configuration Warning
 
@@ -449,7 +451,7 @@ After installation, the integration will display a **system notification** recom
 
 ![Settings Recorder Exclude](docs/images/en_settings_recorder_exclude_entities.jpg)
 
-> 💡 **Note:** These entities will still work perfectly in your dashboards and automations - they just won't be stored in historical database records.
+> 💡 **Note:** These entities will still work in your dashboards and automations - they just won't be stored in historical database records.
 
 ---
 
@@ -930,44 +932,6 @@ automation:
 
 ---
 
-## 🔧 Troubleshooting
-
-### Integration Not Loading
-
-1. **Check logs** in Settings → System → Logs
-2. **Verify installation** - files should be in `custom_components/okte/`
-3. **Restart Home Assistant** after installation
-4. **Clear browser cache** if UI doesn't show the integration
-
-### No Data / Unavailable Sensors
-
-1. **Check OKTE Master connection**: Verify `sensor.okte_connection_status` is "Connected"
-2. **Manually trigger data fetch**: Press `button.okte_update_data`
-3. **Verify fetch time**: Ensure it's after 13:00 when OKTE publishes prices
-4. **Check API accessibility**: OKTE API might be temporarily unavailable
-
-### Calculator Window Not Updating
-
-1. **Verify time range settings** in Calculator configuration
-2. **Check window size** - ensure it's not larger than the search range
-3. **Verify OKTE Master** has valid data
-4. **Check sunrise/sunset switches** - they might override manual times
-
-### Database Performance Issues
-
-1. **Implement recorder exclusions** as described in [Database Optimization](#-database-optimization)
-2. **Restart Home Assistant** after adding exclusions
-3. **Purge old data**: Developer Tools → Services → `recorder.purge`
-
-### Charts Not Displaying
-
-1. **Install ApexCharts Card** via HACS
-2. **Clear browser cache**
-3. **Check entity IDs** in card configuration match your device names
-4. **Verify sensor data**: Check if `sensor.okte_prices_today` has `period_data` attribute
-
----
-
 ## 💬 Support
 
 ### 📧 Contact & Links
@@ -986,7 +950,7 @@ When reporting issues, please include:
 4. Steps to reproduce the issue
 5. Screenshots if applicable
 
-### ⭐ Show Your Support
+### ⭐ Support Me
 
 If you find this integration useful, please consider:
 - ⭐ **Star the repository** on GitHub
