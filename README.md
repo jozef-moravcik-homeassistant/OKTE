@@ -24,6 +24,7 @@
 - 🔢 **Statistical sensors** (min, max, average prices)
 - 🌓 **Sunrise/sunset integration** for time window configuration
 - 🔧 **Multiple Calculator devices** for independent automation scenarios
+- 🔀 **failover function** In the case of data source failure, averaged prices based on periods and timeframes are used
 
 ---
 
@@ -88,6 +89,7 @@ The OKTE integration uses **two types of virtual devices**:
 - Handles automatic data fetching from OKTE API
 - Provides price sensors, statistics, and data for Calculator devices
 - **Default data fetch time: 14:00** (OKTE publishes next day prices around 13:00)
+- Master provides a "failover function" that, in the case of data source outage, uses averaged prices based on individual periods and days.
 
 ![OKTE Master Configuration](docs/images/en_device_okte_master_configuration.jpg)
 
@@ -131,7 +133,7 @@ Both device types offer an option to **include device name in entity names**:
 
 ## 📡 OKTE Master Device
 
-The **OKTE Master** device is the core component that handles all communication with the OKTE API. It automatically downloads electricity price data and provides it to the system.
+The **OKTE Master** device is the core component that handles all communication with the OKTE API, data storage and calculation of average prices in the event of a data source failure. It automatically downloads electricity price data and provides it to the system.
 
 ### Master Device Configuration
 
@@ -143,6 +145,19 @@ The **OKTE Master** device is the core component that handles all communication 
 |-----------|---------|-------------|
 | **Add 'OKTE -' prefix to entity names** | ✅ Enabled | Adds "okte_" prefix to all entity IDs |
 | **Daily fetch time** | 14:00 | Time when data is automatically downloaded from OKTE API |
+| **Data Failover mode** | Averages by week days | In case of data source unavailability, OKTE will populate the data in the sensors using price averages. |
+| **Number of weeks included in averages** | 4 | umber of weeks over which price averages are calculated (valid only for Data Failover mode = "Averages by week days") |
+| **Number of days included in averages** | 7 | počet dní za ktoré sa počítajú cenové priemery (valid only for Data Failover mode = "Averages from all days") |
+| **Unit of price sensors** | EUR/MWh |  |
+
+**Data Failover mode option:**
+  - **Averages by week days** - It calculates the average for individual periods for each calendar day of the week and uses these values ​​if the OKTE data source is unavailable and data in sensors is outdated or invalid.
+  - **Averages from all days** - It calculates averages for individual periods from all days and uses them if the OKTE data source is unavailable and data in sensors is outdated or invalid.
+  - **Disabled** – the Data Failover function is disabled; if the OKTE data source is unavailable and the sensors contain outdated or invalid data, the data in the sensors will remain invalid.
+
+> ⚠️ **How data failover works:**
+If the connection to the OKTE data source is interrupted and the data in the sensors becomes outdated over time, price averages calculated for each period are automatically loaded into the sensors.
+Example: If the connection to the OKTE source is lost during today's data retrieval, the retrieval process is retried several times. If the connection is not restored by midnight, the data for the following day is shifted to the current day at midnight. However, if the data source remains unavailable during the next cycle—or at midnight—price averages calculated from previous data are automatically loaded into the sensors. This ensures that automations and processes dependent on this data do not fail. Once the connection to the data source is restored, the data is automatically loaded into the sensors from that source.ja.
 
 > ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. At midnight, data for the following day is automatically moved to the current day, therefore, there is no need to download the data after midnight. Data for the following day will be added during the next scheduled download (default: 14:00). If a download fails—for example, due to an interrupted internet connection or an issue on the OKTE side—the integration will attempt to download the data every minute until it succeeds. This status is indicated by the `sensor.okte_connection_status` sensor, and any error code is recorded in the `sensor.okte_error_code` sensor. The data remains stored in the system even after an HA restart.
 
@@ -163,6 +178,9 @@ The Master device creates the following entities:
 | `sensor.okte_average_price_tomorrow` | Tomorrow's average price | EUR/MWh | - |
 | `sensor.okte_min_price_tomorrow` | Tomorrow's minimum price | EUR/MWh | `time_from`, `time_to` |
 | `sensor.okte_max_price_tomorrow` | Tomorrow's maximum price | EUR/MWh | `time_from`, `time_to` |
+| `sensor.okte_failover_data` | Price Average Data for Failover | EUR/MWh | `Failover data today`, `Failover data tomorrowo`, `Period data Monday` .... `Period data Sunday` |
+
+> ⚠️ **INFO:** If `sensor.okte_failover_data` is `false`, the price sensors contain actual data retrieved from the OKTE data source, if it is `true`, the sensors contain price averages.
 
 #### 📈 Chart Data Sensors
 
@@ -203,6 +221,7 @@ The Master device creates the following entities:
 | Entity ID | Description | Action |
 |-----------|-------------|--------|
 | `button.okte_update_data` | Manual data fetch | Triggers immediate API data download |
+| `button.okte_reset_failover_history` | Manual reset of Failover history | Resets all price averages for failover and calculates initialization data based on data from the last two weeks. |
 
 ### Example Card for Master Device
 
