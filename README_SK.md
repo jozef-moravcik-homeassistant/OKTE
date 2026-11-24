@@ -24,7 +24,7 @@
 - 🔢 **Štatistické senzory** (min, max, priemerné ceny)
 - 🌓 **Integrácia východu/západu slnka** pre konfiguráciu časových okien
 - 🔧 **Viacero Calculator zariadení** pre nezávislé automatizačné scenáre
-- 🔀 **failover function** V prípade výpadku zdroja údajov sa použijú spriemerované ceny podľa jednotlivých periód a dní.
+- 🔀 **Failover function** V prípade výpadku zdroja údajov sa použijú spriemerované ceny podľa jednotlivých periód a dní.
 
 ---
 
