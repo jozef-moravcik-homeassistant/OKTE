@@ -9,14 +9,18 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from homeassistant.const import STATE_ON, STATE_OFF, STATE_UNKNOWN, STATE_UNAVAILABLE, STATE_OK, STATE_PROBLEM
+from homeassistant.util import dt as dt_util
+
+# OKTE is the Slovak market - market days and periods are always in Slovak local time,
+# independent of the Home Assistant time zone (resolved at import time, outside the event loop)
+MARKET_TIMEZONE = dt_util.get_time_zone("Europe/Bratislava")
 
 # Custom states for window sensors
 STATE_WINDOW_FOUND = "OK"
 STATE_WINDOW_NOT_FOUND = "NOT"
 
 DOMAIN = "okte"
-VERSION = "1.01.03"
+VERSION = "1.01.04"
 DOCUMENTATION_URL = "https://github.com/jozef-moravcik-homeassistant/okte"
 MANUFACTURER = "Jozef Moravcik"
 MODEL_MASTER = "OKTE Master"
@@ -41,8 +45,6 @@ def sanitize_device_name(device_name: str) -> str:
 
 def get_next_calculator_number(hass) -> int:
     """Get the next available calculator number, filling gaps if any exist."""
-    from homeassistant.config_entries import ConfigEntry
-    
     # Get all existing calculator entries
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     calculator_entries = [
@@ -87,8 +89,14 @@ def get_calculator_number_from_name(device_name: str) -> int:
 ##############################################################################################################################
 # Services ###################################################################################################################
 ##############################################################################################################################
-SERVICE_SYSTEM_STARTED = "system_started"
 SERVICE_FETCH_DATA = "fetch_data"
+
+##############################################################################################################################
+# Dispatcher signals #########################################################################################################
+##############################################################################################################################
+SIGNAL_FEEDBACK_UPDATE = DOMAIN + "_feedback_update_{}"   # entry_id - refresh all entities of an entry
+SIGNAL_NAME_UPDATE = DOMAIN + "_name_update_{}"           # entry_id - device renamed, refresh entity names
+SIGNAL_MASTER_DATA_UPDATED = DOMAIN + "_master_data_updated"  # Master price data changed (fetch, rollover, failover)
 
 ##############################################################################################################################
 # States and commands ########################################################################################################
@@ -121,6 +129,37 @@ DEFAULT_FETCH_TIME = "14:00"
 
 CONF_FETCH_DAYS = "fetch_days"
 DEFAULT_FETCH_DAYS = 2
+
+# Data failover system (prices computed from historical averages when OKTE is unavailable)
+CONF_DATA_FAILOVER_MODE = "data_failover_mode"
+FAILOVER_MODE_WEEKDAYS = "weekdays"
+FAILOVER_MODE_ALL_DAYS = "all_days"
+FAILOVER_MODE_DISABLED = "disabled"
+FAILOVER_MODES = [FAILOVER_MODE_WEEKDAYS, FAILOVER_MODE_ALL_DAYS, FAILOVER_MODE_DISABLED]
+DEFAULT_DATA_FAILOVER_MODE = FAILOVER_MODE_WEEKDAYS
+
+CONF_FAILOVER_WEEKS = "failover_weeks"
+DEFAULT_FAILOVER_WEEKS = 4
+MIN_FAILOVER_WEEKS = 1
+MAX_FAILOVER_WEEKS = 12
+
+CONF_FAILOVER_DAYS = "failover_days"
+DEFAULT_FAILOVER_DAYS = 7
+MIN_FAILOVER_DAYS = 1
+MAX_FAILOVER_DAYS = 30
+
+FAILOVER_HISTORY_KEEP_DAYS = 90  # how many days of price history are kept in storage
+FAILOVER_STATISTICS_DAYS = 10  # retention of short-term recorder statistics
+TOMORROW_RETRY_INTERVAL = 900  # seconds between fetch retries when tomorrow prices are missing after the daily fetch time
+FETCH_RETRY_INTERVAL = 60  # seconds between fetch retries after a failed fetch
+
+# Unit of the price sensors (OKTE publishes EUR/MWh)
+CONF_PRICE_UNIT = "price_unit"
+PRICE_UNIT_EUR_MWH = "eur_mwh"
+PRICE_UNIT_EUR_KWH = "eur_kwh"
+PRICE_UNITS = [PRICE_UNIT_EUR_MWH, PRICE_UNIT_EUR_KWH]
+DEFAULT_PRICE_UNIT = PRICE_UNIT_EUR_MWH
+PRICE_UNIT_LABELS = {PRICE_UNIT_EUR_MWH: "EUR/MWh", PRICE_UNIT_EUR_KWH: "EUR/kWh"}
 
 ##############################################################################################################################
 # Configuration keys - Window Device #########################################################################################
@@ -164,6 +203,7 @@ ENTITY_PRICES_TOMORROW = "prices_tomorrow"
 ENTITY_HTML_TABLE_TODAY = "html_table_today"
 ENTITY_HTML_TABLE_TOMORROW = "html_table_tomorrow"
 ENTITY_ERROR_CODE = "error_code"
+ENTITY_FAILOVER_DATA = "failover_data"
 
 # Window Device Entities
 ENTITY_LOWEST_PRICE_WINDOW = "lowest_price_window"
@@ -214,6 +254,53 @@ AUTO_TIME_PREFIX_KEYS = {
     ENTITY_HIGHEST_TIME_TO: ENTITY_HIGHEST_AUTO_TIME_TO_PREFIX,
 }
 
+# Mapping: time entity key -> switch entity key that sets it automatically (sunrise for "from", sunset for "to")
+AUTO_TIME_SWITCH_KEYS = {
+    ENTITY_LOWEST_TIME_FROM: ENTITY_LOWEST_AUTO_TIME_FROM,
+    ENTITY_LOWEST_TIME_TO: ENTITY_LOWEST_AUTO_TIME_TO,
+    ENTITY_HIGHEST_TIME_FROM: ENTITY_HIGHEST_AUTO_TIME_FROM,
+    ENTITY_HIGHEST_TIME_TO: ENTITY_HIGHEST_AUTO_TIME_TO,
+}
+
+
+def parse_sun_time(time_attr):
+    """Parse a sun.sun next_rising/next_setting attribute to a datetime in market time (None if invalid)."""
+    from datetime import datetime
+    try:
+        if isinstance(time_attr, str):
+            sun_time = datetime.fromisoformat(time_attr.replace('Z', '+00:00'))
+        elif isinstance(time_attr, datetime):
+            sun_time = time_attr
+        else:
+            return None
+        if sun_time.tzinfo is None:
+            sun_time = sun_time.replace(tzinfo=dt_util.UTC)
+        return sun_time.astimezone(MARKET_TIMEZONE)
+    except (TypeError, ValueError):
+        return None
+
+
+async def async_load_translations(hass) -> dict:
+    """Load the integration translation file for the configured language (strings.json fallback)."""
+    import json
+    from pathlib import Path
+
+    def _load() -> dict:
+        integration_dir = Path(__file__).parent
+        for path in (
+            integration_dir / "translations" / f"{hass.config.language or 'en'}.json",
+            integration_dir / "strings.json",
+        ):
+            if path.exists():
+                try:
+                    with open(path, "r", encoding="utf-8") as file:
+                        return json.load(file)
+                except (OSError, ValueError):
+                    continue
+        return {}
+
+    return await hass.async_add_executor_job(_load)
+
 
 def apply_sun_prefix(sun_time, prefix, is_from):
     """Apply prefix to sunrise/sunset time (both datetime.time, HH:MM).
@@ -235,10 +322,8 @@ def apply_sun_prefix(sun_time, prefix, is_from):
 ##############################################################################################################################
 # Default values of static parameters ########################################################################################
 ##############################################################################################################################
-DEFAULT_FALLBACK_CHECK_INTERVAL = 15  # 15 seconds - for Master devices (fast current price updates)
-DEFAULT_FALLBACK_CHECK_INTERVAL_CALCULATOR = 15  # 15 seconds - for Calculator devices (fast detector updates)
-DEBOUNCE_DELAY = 0.2  # seconds - it groups all changes within this time period (due to better performance)
 CALCULATION_DEBOUNCE_DELAY = 2.0  # seconds - delay for window calculations after config changes (prevents multiple recalculations during value adjustments)
+MASTER_DATA_DEBOUNCE_DELAY = 0.5  # seconds - delay for window calculations after Master data changed
 
 
 @dataclass

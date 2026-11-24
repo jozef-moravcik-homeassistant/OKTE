@@ -6,7 +6,11 @@
         "description": "Konfigurácia Master zariadenia pre sťahovanie dát z API",
         "data": {
           "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
-          "fetch_time": "Čas denného sťahovania (HH:MM)"
+          "fetch_time": "Čas denného sťahovania (HH:MM)",
+          "data_failover_mode": "Data Failover Mode",
+          "failover_weeks": "Počet týždňov započítaných do priemerov",
+          "failover_days": "Počet dní započítaných do priemerov",
+          "price_unit": "Jednotka cenových senzorov"
         }
       },
       "window_parameters": {
@@ -29,7 +33,11 @@
         "description": "Konfigurácia nastavení Master zariadenia",
         "data": {
           "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
-          "fetch_time": "Čas denného sťahovania (HH:MM)"
+          "fetch_time": "Čas denného sťahovania (HH:MM)",
+          "data_failover_mode": "Data Failover Mode",
+          "failover_weeks": "Počet týždňov započítaných do priemerov",
+          "failover_days": "Počet dní započítaných do priemerov",
+          "price_unit": "Jednotka cenových senzorov"
         }
       },
       "window_parameters": {
@@ -42,10 +50,6 @@
     }
   },
   "services": {
-    "system_started": {
-      "name": "Systém spustený",
-      "description": "Inicializácia systému"
-    },
     "fetch_data": {
       "name": "Stiahnuť dáta",
       "description": "Manuálne stiahnutie cenových dát z API"
@@ -56,6 +60,19 @@
       "options": {
         "master": "Master (sťahovanie dát z API)",
         "window": "OKTE Calculator (výpočet časových okien)"
+      }
+    },
+    "data_failover_mode": {
+      "options": {
+        "weekdays": "Priemery podľa dní v týždni",
+        "all_days": "Priemery zo všetkých dní",
+        "disabled": "Vypnuté"
+      }
+    },
+    "price_unit": {
+      "options": {
+        "eur_mwh": "EUR/MWh",
+        "eur_kwh": "EUR/kWh"
       }
     }
   },
@@ -72,6 +89,9 @@
       },
       "error_code": {
         "name": "Chybový kód"
+      },
+      "failover_data": {
+        "name": "Failover dáta"
       },
       "current_price": {
         "name": "Aktuálna cena"
@@ -140,6 +160,9 @@
     "button": {
       "update_data": {
         "name": "Aktualizovať údaje"
+      },
+      "reset_failover_history": {
+        "name": "Resetovať históriu záložných dát"
       }
     },
     "binary_sensor": {
@@ -205,10 +228,12 @@
       }
     }
   },
-  "issues": {
-    "recorder_exclude_recommendation": {
-      "title": "Vylúčte veľké OKTE entity z recorder histórie",
-      "description": "Niektoré OKTE entity obsahujú veľké dáta (HTML tabuľky, zoznamy cien) presahujúce 16KB, čo môže spôsobiť problémy s výkonom databázy.\n\nTieto entity sú stále viditeľné v UI, ale nemali by sa ukladať do histórie databázy:\n\n{entities}\n\nPridajte túto konfiguráciu do vášho configuration.yaml:\n\n```yaml\n{yaml_config}\n```\n\nPotom reštartujte Home Assistant pre aplikovanie zmien."
+  "exceptions": {
+    "auto_mode_sunrise": {
+      "message": "Čas nie je možné zmeniť - nastavuje sa automaticky podľa východu slnka. Najprv vypnite príslušný prepínač."
+    },
+    "auto_mode_sunset": {
+      "message": "Čas nie je možné zmeniť - nastavuje sa automaticky podľa západu slnka. Najprv vypnite príslušný prepínač."
     }
   }
 }

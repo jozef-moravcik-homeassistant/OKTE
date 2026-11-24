@@ -6,7 +6,11 @@
         "description": "Configure Master device for API data fetching",
         "data": {
           "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
-          "fetch_time": "Daily fetch time (HH:MM)"
+          "fetch_time": "Daily fetch time (HH:MM)",
+          "data_failover_mode": "Data Failover Mode",
+          "failover_weeks": "Number of weeks included in averages",
+          "failover_days": "Number of days included in averages",
+          "price_unit": "Unit of price sensors"
         }
       },
       "window_parameters": {
@@ -29,7 +33,11 @@
         "description": "Configure Master device settings",
         "data": {
           "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
-          "fetch_time": "Daily fetch time (HH:MM)"
+          "fetch_time": "Daily fetch time (HH:MM)",
+          "data_failover_mode": "Data Failover Mode",
+          "failover_weeks": "Number of weeks included in averages",
+          "failover_days": "Number of days included in averages",
+          "price_unit": "Unit of price sensors"
         }
       },
       "window_parameters": {
@@ -42,10 +50,6 @@
     }
   },
   "services": {
-    "system_started": {
-      "name": "System Started",
-      "description": "Initialize the system"
-    },
     "fetch_data": {
       "name": "Fetch Data",
       "description": "Manually fetch price data from API"
@@ -56,6 +60,19 @@
       "options": {
         "master": "Master (API Data Fetcher)",
         "window": "OKTE Calculator (Time Window Calculator)"
+      }
+    },
+    "data_failover_mode": {
+      "options": {
+        "weekdays": "Averages by week days",
+        "all_days": "Averages from all days",
+        "disabled": "Disabled"
+      }
+    },
+    "price_unit": {
+      "options": {
+        "eur_mwh": "EUR/MWh",
+        "eur_kwh": "EUR/kWh"
       }
     }
   },
@@ -72,6 +89,9 @@
       },
       "error_code": {
         "name": "Error Code"
+      },
+      "failover_data": {
+        "name": "Failover Data"
       },
       "current_price": {
         "name": "Current Price"
@@ -140,6 +160,9 @@
     "button": {
       "update_data": {
         "name": "Update Data"
+      },
+      "reset_failover_history": {
+        "name": "Reset Failover History"
       }
     },
     "binary_sensor": {
@@ -205,10 +228,12 @@
       }
     }
   },
-  "issues": {
-    "recorder_exclude_recommendation": {
-      "title": "Exclude large OKTE entities from recorder",
-      "description": "Some OKTE entities contain large data (HTML tables, price lists) exceeding 16KB which can cause database performance issues.\n\nThese entities are still visible in UI but should not be stored in history database:\n\n{entities}\n\nAdd this configuration to your configuration.yaml:\n\n```yaml\n{yaml_config}\n```\n\nThen restart Home Assistant to apply the changes."
+  "exceptions": {
+    "auto_mode_sunrise": {
+      "message": "The time cannot be changed - it is set automatically from sunrise. Switch off the corresponding switch first."
+    },
+    "auto_mode_sunset": {
+      "message": "The time cannot be changed - it is set automatically from sunset. Switch off the corresponding switch first."
     }
   }
 }

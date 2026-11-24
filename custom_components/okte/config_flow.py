@@ -8,10 +8,12 @@ from __future__ import annotations
 """ Config flow for OKTE Integration."""
 
 import logging
+from datetime import time as dt_time
+
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -23,10 +25,95 @@ from homeassistant.helpers.selector import (
 )
 import homeassistant.helpers.config_validation as cv
 
-from .okte import OKTE_Master_Instance, OKTE_Window_Instance
-from .const import *
+from .const import (
+    CONF_DATA_FAILOVER_MODE,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
+    CONF_FAILOVER_DAYS,
+    CONF_FAILOVER_WEEKS,
+    CONF_FETCH_TIME,
+    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
+    CONF_MASTER_DEVICE,
+    CONF_PRICE_UNIT,
+    DEFAULT_DATA_FAILOVER_MODE,
+    DEFAULT_FAILOVER_DAYS,
+    DEFAULT_FAILOVER_WEEKS,
+    DEFAULT_FETCH_TIME,
+    DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
+    DEFAULT_PRICE_UNIT,
+    DEVICE_TYPE_CALCULATOR,
+    DEVICE_TYPE_MASTER,
+    DOMAIN,
+    FAILOVER_MODES,
+    MAX_FAILOVER_DAYS,
+    MAX_FAILOVER_WEEKS,
+    MIN_FAILOVER_DAYS,
+    MIN_FAILOVER_WEEKS,
+    PRICE_UNITS,
+    get_next_calculator_number,
+)
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _price_unit_selector():
+    """Selector for the unit of the price sensors."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=PRICE_UNITS,
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key=CONF_PRICE_UNIT,
+        )
+    )
+
+
+def _time_to_str(user_input):
+    """TimeSelector returns 'HH:MM:SS' (or a time object) - store fetch time as 'HH:MM'."""
+    value = user_input.get(CONF_FETCH_TIME)
+    if isinstance(value, dt_time):
+        user_input[CONF_FETCH_TIME] = f"{value.hour:02d}:{value.minute:02d}"
+    elif isinstance(value, str) and value.count(':') == 2:
+        user_input[CONF_FETCH_TIME] = value[:5]
+    for key in (CONF_FAILOVER_WEEKS, CONF_FAILOVER_DAYS):
+        if key in user_input:
+            user_input[key] = int(user_input[key])
+    return user_input
+
+
+def _failover_mode_selector():
+    """Selector for Data Failover Mode."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=FAILOVER_MODES,
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key=CONF_DATA_FAILOVER_MODE,
+        )
+    )
+
+
+def _failover_weeks_selector():
+    """Selector for number of weeks used in averages."""
+    return NumberSelector(
+        NumberSelectorConfig(
+            min=MIN_FAILOVER_WEEKS,
+            max=MAX_FAILOVER_WEEKS,
+            step=1,
+            mode=NumberSelectorMode.BOX,
+        )
+    )
+
+
+def _failover_days_selector():
+    """Selector for number of days used in averages."""
+    return NumberSelector(
+        NumberSelectorConfig(
+            min=MIN_FAILOVER_DAYS,
+            max=MAX_FAILOVER_DAYS,
+            step=1,
+            mode=NumberSelectorMode.BOX,
+        )
+    )
+
 
 class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -58,8 +145,6 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_import(self, import_data=None):
         """Handle import of the Master device from configuration.yaml."""
-        from datetime import time as dt_time
-
         import_data = dict(import_data or {})
         fetch_time = import_data.get(CONF_FETCH_TIME, DEFAULT_FETCH_TIME)
         if isinstance(fetch_time, dt_time):
@@ -86,13 +171,8 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Convert time object to string with seconds=0 (TimeSelector returns time object)
-            from datetime import time as dt_time
-            if CONF_FETCH_TIME in user_input and isinstance(user_input[CONF_FETCH_TIME], dt_time):
-                time_obj = user_input[CONF_FETCH_TIME]
-                # Convert to string HH:MM format (seconds always 0)
-                user_input[CONF_FETCH_TIME] = f"{time_obj.hour:02d}:{time_obj.minute:02d}"
-            
+            user_input = _time_to_str(user_input)
+
             # IMPORTANT: Preserve CONF_DEVICE_TYPE before update
             device_type = self._data.get(CONF_DEVICE_TYPE)
             
@@ -110,7 +190,7 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
             
-            LOGGER.info(f"Creating Master entry with data: {self._data}")
+            LOGGER.debug("Creating Master entry")
             
             return self.async_create_entry(
                 title=device_name,
@@ -119,7 +199,6 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Master device configuration - NO device_name field, NO fetch_days field
         # Convert DEFAULT_FETCH_TIME string to time object
-        from datetime import time as dt_time
         default_time_parts = DEFAULT_FETCH_TIME.split(':')
         default_time = dt_time(int(default_time_parts[0]), int(default_time_parts[1]))
         
@@ -133,6 +212,22 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_FETCH_TIME,
                     default=default_time,
                 ): TimeSelector(config={}),
+                vol.Required(
+                    CONF_DATA_FAILOVER_MODE,
+                    default=DEFAULT_DATA_FAILOVER_MODE,
+                ): _failover_mode_selector(),
+                vol.Required(
+                    CONF_FAILOVER_WEEKS,
+                    default=DEFAULT_FAILOVER_WEEKS,
+                ): _failover_weeks_selector(),
+                vol.Required(
+                    CONF_FAILOVER_DAYS,
+                    default=DEFAULT_FAILOVER_DAYS,
+                ): _failover_days_selector(),
+                vol.Required(
+                    CONF_PRICE_UNIT,
+                    default=DEFAULT_PRICE_UNIT,
+                ): _price_unit_selector(),
             }
         )
 
@@ -170,7 +265,6 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_MASTER_DEVICE] = master_entry.entry_id
             
             # Get next available calculator number
-            from .const import get_next_calculator_number
             calculator_number = get_next_calculator_number(self.hass)
             device_name = f"Calculator {calculator_number}"
             self._data[CONF_DEVICE_NAME] = device_name
@@ -180,7 +274,7 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
             
-            LOGGER.info(f"Creating Calculator entry with data: {self._data}")
+            LOGGER.debug("Creating Calculator entry %s", device_name)
             
             return self.async_create_entry(
                 title=device_name,
@@ -242,13 +336,8 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
-            # Convert time object to string with seconds=0 (TimeSelector returns time object)
-            from datetime import time as dt_time
-            if CONF_FETCH_TIME in user_input and isinstance(user_input[CONF_FETCH_TIME], dt_time):
-                time_obj = user_input[CONF_FETCH_TIME]
-                # Convert to string HH:MM format (seconds always 0)
-                user_input[CONF_FETCH_TIME] = f"{time_obj.hour:02d}:{time_obj.minute:02d}"
-            
+            user_input = _time_to_str(user_input)
+
             # Keep stored entity values (window sizes, times, switches) - merge instead of replace
             return self.async_create_entry(title="", data={**self.config_entry.options, **user_input})
 
@@ -262,8 +351,24 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
             self.config_entry.data.get(CONF_FETCH_TIME, DEFAULT_FETCH_TIME)
         )
         
+        current_failover_mode = self.config_entry.options.get(
+            CONF_DATA_FAILOVER_MODE,
+            self.config_entry.data.get(CONF_DATA_FAILOVER_MODE, DEFAULT_DATA_FAILOVER_MODE)
+        )
+        current_failover_weeks = int(self.config_entry.options.get(
+            CONF_FAILOVER_WEEKS,
+            self.config_entry.data.get(CONF_FAILOVER_WEEKS, DEFAULT_FAILOVER_WEEKS)
+        ))
+        current_failover_days = int(self.config_entry.options.get(
+            CONF_FAILOVER_DAYS,
+            self.config_entry.data.get(CONF_FAILOVER_DAYS, DEFAULT_FAILOVER_DAYS)
+        ))
+        current_price_unit = self.config_entry.options.get(
+            CONF_PRICE_UNIT,
+            self.config_entry.data.get(CONF_PRICE_UNIT, DEFAULT_PRICE_UNIT)
+        )
+
         # Convert string time to time object
-        from datetime import time as dt_time
         if isinstance(current_fetch_time_str, str):
             time_parts = current_fetch_time_str.split(':')
             current_fetch_time = dt_time(int(time_parts[0]), int(time_parts[1]))
@@ -280,6 +385,22 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_FETCH_TIME,
                     default=current_fetch_time,
                 ): TimeSelector(config={}),
+                vol.Required(
+                    CONF_DATA_FAILOVER_MODE,
+                    default=current_failover_mode,
+                ): _failover_mode_selector(),
+                vol.Required(
+                    CONF_FAILOVER_WEEKS,
+                    default=current_failover_weeks,
+                ): _failover_weeks_selector(),
+                vol.Required(
+                    CONF_FAILOVER_DAYS,
+                    default=current_failover_days,
+                ): _failover_days_selector(),
+                vol.Required(
+                    CONF_PRICE_UNIT,
+                    default=current_price_unit,
+                ): _price_unit_selector(),
             }
         )
 

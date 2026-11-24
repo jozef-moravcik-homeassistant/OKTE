@@ -13,24 +13,27 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.const import STATE_ON, STATE_OFF
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
-    DOMAIN,
-    DEVICE_TYPE_CALCULATOR,
-    CONF_DEVICE_TYPE,
-    ENTITY_LOWEST_AUTO_TIME_FROM,
-    ENTITY_LOWEST_AUTO_TIME_TO,
-    ENTITY_HIGHEST_AUTO_TIME_FROM,
-    ENTITY_HIGHEST_AUTO_TIME_TO,
-    ENTITY_LOWEST_TIME_FROM,
-    ENTITY_LOWEST_TIME_TO,
-    ENTITY_HIGHEST_TIME_FROM,
-    ENTITY_HIGHEST_TIME_TO,
     AUTO_TIME_PREFIX_KEYS,
+    AUTO_TIME_SWITCH_KEYS,
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_CALCULATOR,
+    DOCUMENTATION_URL,
+    DOMAIN,
+    ENTITY_PREFIX,
+    MANUFACTURER,
+    MODEL_CALCULATOR,
+    SIGNAL_NAME_UPDATE,
+    VERSION,
     apply_sun_prefix,
+    async_load_translations,
+    get_calculator_number_from_name,
+    parse_sun_time,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -41,30 +44,16 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up OKTE switch entities."""
-    device_type = config_entry.data.get(CONF_DEVICE_TYPE)
-    LOGGER.info(f"Switch platform setup for entry {config_entry.entry_id}, device_type: {device_type}")
-    
-    # Only Window (Calculator) devices have switch entities
-    if device_type != DEVICE_TYPE_CALCULATOR:
-        LOGGER.info(f"Skipping switch entities - not a Window device (type: {device_type})")
+    """Set up OKTE switch entities (Calculator devices only)."""
+    if config_entry.data.get(CONF_DEVICE_TYPE) != DEVICE_TYPE_CALCULATOR:
         return
-    
+
     instance = config_entry.runtime_data.instance
-    LOGGER.info(f"Creating switch entities for Calculator device")
-    
-    from .sensor import _load_translations
-    translations = await _load_translations(hass)
-    
-    switches = [
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_FROM, ENTITY_LOWEST_TIME_FROM, translations),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_LOWEST_AUTO_TIME_TO, ENTITY_LOWEST_TIME_TO, translations),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_FROM, ENTITY_HIGHEST_TIME_FROM, translations),
-        OkteAutoTimeSwitch(hass, config_entry, instance, ENTITY_HIGHEST_AUTO_TIME_TO, ENTITY_HIGHEST_TIME_TO, translations),
-    ]
-    
-    LOGGER.info(f"Adding {len(switches)} switch entities")
-    async_add_entities(switches, True)
+    translations = await async_load_translations(hass)
+    async_add_entities([
+        OkteAutoTimeSwitch(hass, config_entry, instance, switch_key, time_key, translations)
+        for time_key, switch_key in AUTO_TIME_SWITCH_KEYS.items()
+    ], True)
 
 
 class OkteAutoTimeSwitch(SwitchEntity):
@@ -89,7 +78,6 @@ class OkteAutoTimeSwitch(SwitchEntity):
         self._entry_id = config_entry.entry_id
         
         # Generate entity_id
-        from .const import ENTITY_PREFIX, get_calculator_number_from_name
         calculator_number = get_calculator_number_from_name(instance.settings.device_name)
         self.entity_id = f"switch.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
         self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{entity_id}"
@@ -119,8 +107,6 @@ class OkteAutoTimeSwitch(SwitchEntity):
         )
         
         # Track sun.sun entity for sunrise/sunset changes
-        from homeassistant.helpers.event import async_track_state_change_event
-        
         @callback
         def sun_changed(event):
             """Handle sun.sun state changes - update time if switch is ON."""
@@ -138,23 +124,10 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # If switch is ON at startup, update the time value
         if self._attr_is_on:
             await self._update_time_value()
-        
-        # Track device registry changes to update entity name immediately when device name changes
-        from homeassistant.helpers.device_registry import async_get as async_get_device_registry, EVENT_DEVICE_REGISTRY_UPDATED
-        
-        @callback
-        def device_registry_updated(event):
-            """Handle device registry update - refresh entity name."""
-            # Check if this event is for our device
-            if event.data.get("device_id"):
-                device_registry = async_get_device_registry(self.hass)
-                device = device_registry.async_get(event.data["device_id"])
-                if device and (DOMAIN, self._entry_id) in device.identifiers:
-                    # Device name changed - update entity state to refresh the name
-                    self.async_write_ha_state()
-        
+
+        # Device renamed - write the state again to refresh the name
         self.async_on_remove(
-            self.hass.bus.async_listen(EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated)
+            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
     
     @callback
@@ -245,9 +218,6 @@ class OkteAutoTimeSwitch(SwitchEntity):
             return
         
         # Get sunrise or sunset time
-        from datetime import datetime
-        import zoneinfo
-        
         if is_from:
             time_attr = sun_state.attributes.get("next_rising")
         else:
@@ -259,8 +229,8 @@ class OkteAutoTimeSwitch(SwitchEntity):
             async_dispatcher_send(self.hass, f"{DOMAIN}_time_update_{self.config_entry.entry_id}")
             return
         
-        # Parse time
-        sun_time = self._parse_sun_time(time_attr)
+        # Parse time (market time - the windows are searched in Slovak time)
+        sun_time = parse_sun_time(time_attr)
         if not sun_time:
             LOGGER.warning("Failed to parse sun time, using default")
             self.instance.time_values[self._time_entity_id] = dt_time(0, 0) if is_from else dt_time(23, 45)
@@ -284,46 +254,14 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # Set the value
         self.instance.time_values[self._time_entity_id] = time_value
         
-        sun_type = "sunrise" if is_from else "sunset"
         if old_value != time_value:
-            LOGGER.info(f"Setting {self._time_entity_id} to {sun_type} time: {time_value.strftime('%H:%M')} (was {old_value.strftime('%H:%M') if old_value else 'None'})")
-        
+            LOGGER.debug("Setting %s to %s time: %s", self._time_entity_id, "sunrise" if is_from else "sunset",
+                         time_value.strftime('%H:%M'))
+
         # Notify the time entity to update
         async_dispatcher_send(self.hass, f"{DOMAIN}_time_update_{self.config_entry.entry_id}")
-        
+
         # Note: Recalculation is triggered by the calling switch (async_turn_on/off) with debounce
-    
-    def _parse_sun_time(self, time_attr) -> datetime | None:
-        """Parse sun time attribute and convert to local datetime."""
-        try:
-            from datetime import datetime
-            import zoneinfo
-            
-            # Parse datetime
-            if isinstance(time_attr, str):
-                # String format - parse it
-                sun_time = datetime.fromisoformat(time_attr.replace('Z', '+00:00'))
-            elif isinstance(time_attr, datetime):
-                sun_time = time_attr
-            else:
-                LOGGER.warning(f"Unexpected time_attr type: {type(time_attr)}")
-                return None
-            
-            # Make sure it's timezone aware
-            if sun_time.tzinfo is None:
-                # Assume UTC if naive
-                sun_time = sun_time.replace(tzinfo=zoneinfo.ZoneInfo('UTC'))
-            
-            # Convert to local timezone
-            ha_timezone = self.hass.config.time_zone
-            tz = zoneinfo.ZoneInfo(ha_timezone)
-            local_time = sun_time.astimezone(tz)
-            
-            return local_time
-            
-        except Exception as e:
-            LOGGER.error(f"Error parsing sun time: {e}")
-            return None
     
     @property
     def unique_id(self) -> str:
@@ -331,11 +269,8 @@ class OkteAutoTimeSwitch(SwitchEntity):
         return f"{self.config_entry.entry_id}_{self._entity_id_key}"
     
     @property
-    def device_info(self) -> dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        from .const import MANUFACTURER, MODEL_CALCULATOR, VERSION, DOCUMENTATION_URL
-        from homeassistant.helpers.entity import DeviceInfo
-        
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self.instance.settings.device_name,

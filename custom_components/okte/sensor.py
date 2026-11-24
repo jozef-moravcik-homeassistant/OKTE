@@ -7,42 +7,188 @@ from __future__ import annotations
 
 """ Sensor platform for OKTE Integration."""
 
-import logging
 import json
+import logging
+from datetime import datetime
+from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import EntityCategory, DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
-from .const import *
+from .const import (
+    DEVICE_TYPE_CALCULATOR,
+    DEVICE_TYPE_MASTER,
+    DOCUMENTATION_URL,
+    DOMAIN,
+    ENTITY_AVERAGE_PRICE_TODAY,
+    ENTITY_AVERAGE_PRICE_TOMORROW,
+    ENTITY_CONNECTION_STATUS,
+    ENTITY_CURRENT_PRICE,
+    ENTITY_DATA_COUNT,
+    ENTITY_ERROR_CODE,
+    ENTITY_FAILOVER_DATA,
+    ENTITY_HIGHEST_PRICE_WINDOW,
+    ENTITY_HIGHEST_PRICE_WINDOW_TODAY,
+    ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW,
+    ENTITY_HIGHEST_SEARCH_WINDOW_SIZE,
+    ENTITY_HIGHEST_TIME_FROM,
+    ENTITY_HIGHEST_TIME_TO,
+    ENTITY_HIGHEST_WINDOW_SIZE,
+    ENTITY_HIGHEST_WINDOW_SIZE_TIME,
+    ENTITY_HTML_TABLE_TODAY,
+    ENTITY_HTML_TABLE_TOMORROW,
+    ENTITY_LAST_UPDATE,
+    ENTITY_LOWEST_PRICE_WINDOW,
+    ENTITY_LOWEST_PRICE_WINDOW_TODAY,
+    ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
+    ENTITY_LOWEST_SEARCH_WINDOW_SIZE,
+    ENTITY_LOWEST_TIME_FROM,
+    ENTITY_LOWEST_TIME_TO,
+    ENTITY_LOWEST_WINDOW_SIZE,
+    ENTITY_LOWEST_WINDOW_SIZE_TIME,
+    ENTITY_MAX_PRICE_TODAY,
+    ENTITY_MAX_PRICE_TOMORROW,
+    ENTITY_MIN_PRICE_TODAY,
+    ENTITY_MIN_PRICE_TOMORROW,
+    ENTITY_PREFIX,
+    ENTITY_PRICES_TODAY,
+    ENTITY_PRICES_TOMORROW,
+    MANUFACTURER,
+    MARKET_TIMEZONE,
+    MODEL_CALCULATOR,
+    MODEL_MASTER,
+    PRICE_UNIT_EUR_KWH,
+    PRICE_UNIT_EUR_MWH,
+    PRICE_UNIT_LABELS,
+    SIGNAL_FEEDBACK_UPDATE,
+    SIGNAL_NAME_UPDATE,
+    STATE_FALSE,
+    STATE_WINDOW_FOUND,
+    STATE_WINDOW_NOT_FOUND,
+    VERSION,
+    async_load_translations,
+    get_calculator_number_from_name,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-async def _load_translations(hass: HomeAssistant) -> dict:
-    """Load translations for the current language."""
-    import json
-    import os
-    
-    def _load_file():
-        try:
-            language = hass.config.language if hass else "en"
-            
-            translations_path = os.path.join(os.path.dirname(__file__), "translations", f"{language}.json")
-            
-            if not os.path.exists(translations_path):
-                translations_path = os.path.join(os.path.dirname(__file__), "strings.json")
-            
-            if os.path.exists(translations_path):
-                with open(translations_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception:
-            pass
-        return {}
-    
-    return await hass.async_add_executor_job(_load_file)
+# Sensors whose value is a price (EUR/MWh from OKTE, optionally converted to EUR/kWh)
+PRICE_VALUE_SENSORS = {
+    ENTITY_CURRENT_PRICE,
+    ENTITY_AVERAGE_PRICE_TODAY,
+    ENTITY_MIN_PRICE_TODAY,
+    ENTITY_MAX_PRICE_TODAY,
+    ENTITY_AVERAGE_PRICE_TOMORROW,
+    ENTITY_MIN_PRICE_TOMORROW,
+    ENTITY_MAX_PRICE_TOMORROW,
+}
+
+# Sensors with very large attributes (price lists, HTML tables, failover profiles)
+LARGE_ATTRIBUTE_SENSORS = {
+    ENTITY_PRICES_TODAY,
+    ENTITY_PRICES_TOMORROW,
+    ENTITY_HTML_TABLE_TODAY,
+    ENTITY_HTML_TABLE_TOMORROW,
+    ENTITY_FAILOVER_DATA,
+}
+
+# Sensors whose attributes are managed by okte.py (sensor_attributes)
+INSTANCE_ATTRIBUTE_SENSORS = {
+    ENTITY_PRICES_TODAY, ENTITY_PRICES_TOMORROW,
+    ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW,
+    ENTITY_CURRENT_PRICE, ENTITY_MIN_PRICE_TODAY, ENTITY_MAX_PRICE_TODAY,
+    ENTITY_MIN_PRICE_TOMORROW, ENTITY_MAX_PRICE_TOMORROW,
+    ENTITY_CONNECTION_STATUS, ENTITY_LAST_UPDATE, ENTITY_FAILOVER_DATA,
+}
+
+WINDOW_SENSORS = {
+    ENTITY_LOWEST_PRICE_WINDOW, ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
+    ENTITY_HIGHEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW,
+}
+CROSS_DAY_WINDOW_SENSORS = {ENTITY_LOWEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW}
+
+# Duration sensors computed from the calculator settings: entity -> (number key, time from key, time to key)
+WINDOW_SIZE_SENSORS = {
+    ENTITY_LOWEST_WINDOW_SIZE_TIME: ENTITY_LOWEST_WINDOW_SIZE,
+    ENTITY_HIGHEST_WINDOW_SIZE_TIME: ENTITY_HIGHEST_WINDOW_SIZE,
+}
+SEARCH_WINDOW_SIZE_SENSORS = {
+    ENTITY_LOWEST_SEARCH_WINDOW_SIZE: (ENTITY_LOWEST_TIME_FROM, ENTITY_LOWEST_TIME_TO),
+    ENTITY_HIGHEST_SEARCH_WINDOW_SIZE: (ENTITY_HIGHEST_TIME_FROM, ENTITY_HIGHEST_TIME_TO),
+}
+DURATION_SENSORS = set(WINDOW_SIZE_SENSORS) | set(SEARCH_WINDOW_SIZE_SENSORS)
+
+# (key, fallback name, icon, extra parameters)
+MASTER_SENSORS = (
+    (ENTITY_CONNECTION_STATUS, "Connection Status", "mdi:connection", {'default_value': False, 'entity_category': EntityCategory.DIAGNOSTIC}),
+    (ENTITY_LAST_UPDATE, "Last Update", "mdi:clock-outline", {'device_class': SensorDeviceClass.TIMESTAMP, 'entity_category': EntityCategory.DIAGNOSTIC}),
+    (ENTITY_DATA_COUNT, "Data Count", "mdi:counter", {'default_value': 0, 'entity_category': EntityCategory.DIAGNOSTIC}),
+    (ENTITY_ERROR_CODE, "Error Code", "mdi:alert-circle", {'default_value': 0, 'entity_category': EntityCategory.DIAGNOSTIC}),
+    (ENTITY_FAILOVER_DATA, "Failover Data", "mdi:database-clock", {'default_value': STATE_FALSE}),
+    (ENTITY_CURRENT_PRICE, "Current Price", "mdi:currency-eur", {}),
+    (ENTITY_AVERAGE_PRICE_TODAY, "Average Price Today", "mdi:chart-line", {}),
+    (ENTITY_MIN_PRICE_TODAY, "Min Price Today", "mdi:arrow-down-bold", {}),
+    (ENTITY_MAX_PRICE_TODAY, "Max Price Today", "mdi:arrow-up-bold", {}),
+    (ENTITY_AVERAGE_PRICE_TOMORROW, "Average Price Tomorrow", "mdi:chart-line", {}),
+    (ENTITY_MIN_PRICE_TOMORROW, "Min Price Tomorrow", "mdi:arrow-down-bold", {}),
+    (ENTITY_MAX_PRICE_TOMORROW, "Max Price Tomorrow", "mdi:arrow-up-bold", {}),
+    (ENTITY_PRICES_TODAY, "Prices Today", "mdi:table-clock", {}),
+    (ENTITY_PRICES_TOMORROW, "Prices Tomorrow", "mdi:table-clock", {}),
+    (ENTITY_HTML_TABLE_TODAY, "HTML Table Today", "mdi:table", {'default_value': ""}),
+    (ENTITY_HTML_TABLE_TOMORROW, "HTML Table Tomorrow", "mdi:table", {'default_value': ""}),
+)
+
+CALCULATOR_SENSORS = (
+    (ENTITY_LOWEST_PRICE_WINDOW, "Lowest Price Window", "mdi:arrow-down-bold-box", {}),
+    (ENTITY_LOWEST_PRICE_WINDOW_TODAY, "Lowest Price Window Today", "mdi:arrow-down-bold-box", {}),
+    (ENTITY_LOWEST_PRICE_WINDOW_TOMORROW, "Lowest Price Window Tomorrow", "mdi:arrow-down-bold-box", {}),
+    (ENTITY_HIGHEST_PRICE_WINDOW, "Highest Price Window", "mdi:arrow-up-bold-box", {}),
+    (ENTITY_HIGHEST_PRICE_WINDOW_TODAY, "Highest Price Window Today", "mdi:arrow-up-bold-box", {}),
+    (ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW, "Highest Price Window Tomorrow", "mdi:arrow-up-bold-box", {}),
+    (ENTITY_LOWEST_WINDOW_SIZE_TIME, "Lowest Price Window Size", "mdi:timer", {'default_value': "0:00"}),
+    (ENTITY_HIGHEST_WINDOW_SIZE_TIME, "Highest Price Window Size", "mdi:timer", {'default_value': "0:00"}),
+    (ENTITY_LOWEST_SEARCH_WINDOW_SIZE, "Lowest Price Search Window Size", "mdi:magnify-expand", {'default_value': "0:00"}),
+    (ENTITY_HIGHEST_SEARCH_WINDOW_SIZE, "Highest Price Search Window Size", "mdi:magnify-expand", {'default_value': "0:00"}),
+)
+
+
+def _format_minutes(total_minutes):
+    """Format minutes as H:MM."""
+    return f"{total_minutes // 60}:{total_minutes % 60:02d}"
+
+
+def _window_size_value(instance, number_key, periods=None):
+    """Window size (periods * 15 min) in H:MM format."""
+    if not hasattr(instance, 'number_values'):
+        return "0:00"
+    periods = periods or instance.number_values.get(number_key, 3)
+    return _format_minutes(int(periods) * 15)
+
+
+def _search_window_minutes(time_from, time_to, cross_day=False):
+    """Length of the search range in minutes (cross-day: from time_from today to time_to tomorrow)."""
+    if cross_day:
+        from_min = time_from.hour * 60 + time_from.minute
+        to_min = 1440 if (time_to.hour == 23 and time_to.minute == 59) else time_to.hour * 60 + time_to.minute
+        return (1440 - from_min) + to_min
+    return abs((time_to.hour * 60 + time_to.minute) - (time_from.hour * 60 + time_from.minute))
+
+
+def _search_window_value(instance, time_keys, cross_day=False):
+    """Search range size in H:MM format."""
+    if not hasattr(instance, 'time_values'):
+        return "0:00"
+    time_from = instance.time_values.get(time_keys[0])
+    time_to = instance.time_values.get(time_keys[1])
+    if not (time_from and time_to):
+        return "0:00"
+    return _format_minutes(_search_window_minutes(time_from, time_to, cross_day))
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -52,393 +198,21 @@ async def async_setup_entry(
     """Set up sensor entities."""
     instance = entry.runtime_data.instance
     device_type = entry.runtime_data.device_type
-    
-    translations = await _load_translations(hass)
+    translations = await async_load_translations(hass)
 
+    definitions = MASTER_SENSORS if device_type == DEVICE_TYPE_MASTER else CALCULATOR_SENSORS
     entities = []
-    
-    if device_type == DEVICE_TYPE_MASTER:
-        # Master device sensors
-        entities = [
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_CONNECTION_STATUS, 
-                name="Connection Status",
-                translations=translations, 
-                icon="mdi:connection",
-                default_value=False,
-                enabled_by_default=True,
-                entity_category=EntityCategory.DIAGNOSTIC,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LAST_UPDATE, 
-                name="Last Update",
-                translations=translations, 
-                icon="mdi:clock-outline",
-                default_value=None,
-                enabled_by_default=True,
-                device_class=SensorDeviceClass.TIMESTAMP,
-                entity_category=EntityCategory.DIAGNOSTIC,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_DATA_COUNT, 
-                name="Data Count",
-                translations=translations, 
-                icon="mdi:counter",
-                default_value=0,
-                enabled_by_default=True,
-                entity_category=EntityCategory.DIAGNOSTIC,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_ERROR_CODE, 
-                name="Error Code",
-                translations=translations, 
-                icon="mdi:alert-circle",
-                default_value=0,
-                enabled_by_default=True,
-                entity_category=EntityCategory.DIAGNOSTIC,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_CURRENT_PRICE, 
-                name="Current Price",
-                translations=translations, 
-                icon="mdi:currency-eur",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_AVERAGE_PRICE_TODAY, 
-                name="Average Price Today",
-                translations=translations, 
-                icon="mdi:chart-line",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_MIN_PRICE_TODAY, 
-                name="Min Price Today",
-                translations=translations, 
-                icon="mdi:arrow-down-bold",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_MAX_PRICE_TODAY, 
-                name="Max Price Today",
-                translations=translations, 
-                icon="mdi:arrow-up-bold",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_AVERAGE_PRICE_TOMORROW, 
-                name="Average Price Tomorrow",
-                translations=translations, 
-                icon="mdi:chart-line",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_MIN_PRICE_TOMORROW, 
-                name="Min Price Tomorrow",
-                translations=translations, 
-                icon="mdi:arrow-down-bold",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_MAX_PRICE_TOMORROW, 
-                name="Max Price Tomorrow",
-                translations=translations, 
-                icon="mdi:arrow-up-bold",
-                default_value=None,
-                enabled_by_default=True,
-                native_unit_of_measurement="EUR/MWh",
-                suggested_display_precision=2,
-                state_class=SensorStateClass.MEASUREMENT,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_PRICES_TODAY, 
-                name="Prices Today",
-                translations=translations, 
-                icon="mdi:table-clock",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_PRICES_TOMORROW, 
-                name="Prices Tomorrow",
-                translations=translations, 
-                icon="mdi:table-clock",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HTML_TABLE_TODAY, 
-                name="HTML Table Today",
-                translations=translations, 
-                icon="mdi:table",
-                default_value="",
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HTML_TABLE_TOMORROW, 
-                name="HTML Table Tomorrow",
-                translations=translations, 
-                icon="mdi:table",
-                default_value="",
-                enabled_by_default=True,
-            ),
-        ]
-    
-    elif device_type == DEVICE_TYPE_CALCULATOR:
-        # Window device sensors
-        entities = [
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LOWEST_PRICE_WINDOW, 
-                name="Lowest Price Window",
-                translations=translations, 
-                icon="mdi:arrow-down-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LOWEST_PRICE_WINDOW_TODAY, 
-                name="Lowest Price Window Today",
-                translations=translations, 
-                icon="mdi:arrow-down-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LOWEST_PRICE_WINDOW_TOMORROW, 
-                name="Lowest Price Window Tomorrow",
-                translations=translations, 
-                icon="mdi:arrow-down-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HIGHEST_PRICE_WINDOW, 
-                name="Highest Price Window",
-                translations=translations, 
-                icon="mdi:arrow-up-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HIGHEST_PRICE_WINDOW_TODAY, 
-                name="Highest Price Window Today",
-                translations=translations, 
-                icon="mdi:arrow-up-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW, 
-                name="Highest Price Window Tomorrow",
-                translations=translations, 
-                icon="mdi:arrow-up-bold-box",
-                default_value=None,
-                enabled_by_default=True,
-            ),
-            # Duration sensors - showing time in H:MM format
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LOWEST_WINDOW_SIZE_TIME, 
-                name="Lowest Price Window Size",
-                translations=translations, 
-                icon="mdi:timer",
-                default_value="0:00",
-                enabled_by_default=True,
-                available=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HIGHEST_WINDOW_SIZE_TIME, 
-                name="Highest Price Window Size",
-                translations=translations, 
-                icon="mdi:timer",
-                default_value="0:00",
-                enabled_by_default=True,
-                available=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_LOWEST_SEARCH_WINDOW_SIZE, 
-                name="Lowest Price Search Window Size",
-                translations=translations, 
-                icon="mdi:magnify-expand",
-                default_value="0:00",
-                enabled_by_default=True,
-                available=True,
-            ),
-            SensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_HIGHEST_SEARCH_WINDOW_SIZE, 
-                name="Highest Price Search Window Size",
-                translations=translations, 
-                icon="mdi:magnify-expand",
-                default_value="0:00",
-                enabled_by_default=True,
-                available=True,
-            ),
-        ]
-
+    for key, name, icon, extra in definitions:
+        sensor_class = LargeAttributesSensor if key in LARGE_ATTRIBUTE_SENSORS else SensorEntityDefinition
+        entities.append(sensor_class(
+            hass, instance, entry_id=entry.entry_id, device_type=device_type,
+            entity_id=key, name=name, translations=translations, icon=icon, **extra,
+        ))
     async_add_entities(entities)
 
-class SensorEntityDefinition(SensorEntity):
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        model = MODEL_MASTER if self._device_type == DEVICE_TYPE_MASTER else MODEL_CALCULATOR
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._instance.settings.device_name,
-            manufacturer=MANUFACTURER,
-            model=model,
-            sw_version=VERSION,
-            configuration_url=DOCUMENTATION_URL,
-        )
-    
-    @property
-    def name(self) -> str:
-        """Return the name of the entity - dynamically generated."""
-        translated_name = self._original_translated_name
-        
-        # Apply prefix based on device type and checkbox setting
-        if self._instance.settings.include_device_name_in_entity:
-            if self._device_type == DEVICE_TYPE_MASTER:
-                # Master: "OKTE - {translated_name}"
-                return f"OKTE - {translated_name}"
-            else:
-                # Calculator: "OKTE - {device_label} - {translated_name}"
-                # Get device label from Home Assistant (the name user sets in native HA dialog)
-                device_entry = self.device_entry
-                
-                if device_entry and device_entry.name_by_user:
-                    device_label = device_entry.name_by_user
-                else:
-                    # Fallback to automatic name if user hasn't set custom name
-                    device_label = self._instance.settings.device_name
-                
-                return f"OKTE - {device_label} - {translated_name}"
-        else:
-            # No prefix - just translated name
-            return translated_name
+class SensorEntityDefinition(SensorEntity):
+    """OKTE sensor - value and attributes come from the device instance."""
 
     def __init__(
         self,
@@ -450,361 +224,121 @@ class SensorEntityDefinition(SensorEntity):
         name: str,
         translations: dict = None,
         icon: str = "mdi:eye",
-        default_value: str = None,
-        enabled_by_default: bool = True,
+        default_value: Any = None,
         device_class: SensorDeviceClass | None = None,
-        state_class: SensorStateClass | None = None,
-        native_unit_of_measurement: str | None = None,
-        suggested_display_precision: int | None = None,
-        suggested_unit_of_measurement: str | None = None,
         entity_category: EntityCategory | None = None,
-        options: list[str] | None = None,
-        available: bool = True,
-        last_reset: str | None = None,
-        attributes: dict | None = None,
     ) -> None:
         """Initialize the sensor."""
         self.hass = hass
         self._instance = instance
         self._entry_id = entry_id
         self._device_type = device_type
-        
-        from .const import ENTITY_PREFIX, get_calculator_number_from_name
-        
-        # Generate entity_id based on device type
+        self._entity_id = entity_id
+
         if device_type == DEVICE_TYPE_MASTER:
-            # Master: okte_{entity_name}
             self.entity_id = f"sensor.{ENTITY_PREFIX}_{entity_id}"
         else:
-            # Calculator: okte_N_{entity_name}
             calculator_number = get_calculator_number_from_name(instance.settings.device_name)
             self.entity_id = f"sensor.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
-        
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{entity_id}"
-        
-        # Get translated name from translations
-        translated_name = name  # Default fallback
-        if translations:
-            entity_trans = translations.get("entity", {}).get("sensor", {}).get(entity_id, {})
-            trans_name = entity_trans.get("name")
-            if trans_name:
-                translated_name = trans_name
-        
-        # Store original translated name for dynamic name generation
-        self._original_translated_name = translated_name
-        
-        # Don't set _attr_name here - use property instead for dynamic updates
-        
+
+        translated = (translations or {}).get("entity", {}).get("sensor", {}).get(entity_id, {}).get("name")
+        self._original_translated_name = translated or name
+
         self._attr_icon = icon
-        self._entity_id = entity_id
         self._attr_native_value = default_value
-        self._attr_available = available
-        self._attr_entity_registry_enabled_default = enabled_by_default
-        self._attr_entity_registry_visible_default = enabled_by_default
-        
-        # Initialize storage for large data (prices JSON, HTML tables, and window data)
-        self._prices_data = None
-        self._html_data = None
+        self._attr_available = True
         self._window_data = None
-        
-        # Store attributes configuration
-        self._attributes_config = attributes if attributes else {}
 
         if device_class is not None:
             self._attr_device_class = device_class
-        if state_class is not None:
-            self._attr_state_class = state_class
-        if native_unit_of_measurement is not None:
-            self._attr_native_unit_of_measurement = native_unit_of_measurement
-        if suggested_display_precision is not None:
-            self._attr_suggested_display_precision = suggested_display_precision
-        if suggested_unit_of_measurement is not None:
-            self._attr_suggested_unit_of_measurement = suggested_unit_of_measurement
         if entity_category is not None:
             self._attr_entity_category = entity_category
-        if options is not None:
-            self._attr_options = options
-        if last_reset is not None:
-            self._attr_last_reset = last_reset
+
+        # Price sensors - unit selected in the Master settings
+        self._price_factor = 1
+        if entity_id in PRICE_VALUE_SENSORS:
+            unit = getattr(instance.settings, 'price_unit', PRICE_UNIT_EUR_MWH)
+            self._attr_native_unit_of_measurement = PRICE_UNIT_LABELS.get(unit, PRICE_UNIT_LABELS[PRICE_UNIT_EUR_MWH])
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            if unit == PRICE_UNIT_EUR_KWH:
+                self._price_factor = 0.001
+                self._attr_suggested_display_precision = 4
+            else:
+                self._attr_suggested_display_precision = 2
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name=self._instance.settings.device_name,
+            manufacturer=MANUFACTURER,
+            model=MODEL_MASTER if self._device_type == DEVICE_TYPE_MASTER else MODEL_CALCULATOR,
+            sw_version=VERSION,
+            configuration_url=DOCUMENTATION_URL,
+        )
+
+    @property
+    def name(self) -> str:
+        """Return the name of the entity - dynamically generated."""
+        translated_name = self._original_translated_name
+        if not self._instance.settings.include_device_name_in_entity:
+            return translated_name
+        if self._device_type == DEVICE_TYPE_MASTER:
+            return f"OKTE - {translated_name}"
+        device_entry = self.device_entry
+        device_label = device_entry.name_by_user if device_entry and device_entry.name_by_user else self._instance.settings.device_name
+        return f"OKTE - {device_label} - {translated_name}"
+
+    def _set_value(self, value) -> None:
+        """Store a value from the instance in the entity."""
+        if self._entity_id in WINDOW_SENSORS:
+            self._window_data = value or None
+        elif self._entity_id == ENTITY_LAST_UPDATE:
+            try:
+                self._attr_native_value = datetime.fromisoformat(value) if value else None
+            except (TypeError, ValueError):
+                self._attr_native_value = None
+        else:
+            self._attr_native_value = value
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
-        
-        # Duration sensors need immediate update with computed values
-        if self._entity_id in [ENTITY_LOWEST_WINDOW_SIZE_TIME, ENTITY_HIGHEST_WINDOW_SIZE_TIME,
-                                ENTITY_LOWEST_SEARCH_WINDOW_SIZE, ENTITY_HIGHEST_SEARCH_WINDOW_SIZE]:
-            # Force initial state update - value will be computed in native_value property
-            self.async_write_ha_state()
-            LOGGER.debug(f"Duration sensor {self.entity_id} initialized with computed value")
-            # Skip sensor_states initialization for duration sensors
-        else:
-            # Load initial value from sensor_states if available (for non-duration sensors)
+
+        if self._entity_id not in DURATION_SENSORS:
             initial_value = self._instance.sensor_states.get(self._entity_id)
             if initial_value is not None:
-                # For prices sensors - just set state (count), attributes come from sensor_attributes
-                if self._entity_id in [ENTITY_PRICES_TODAY, ENTITY_PRICES_TOMORROW]:
-                    self._attr_native_value = initial_value
-                    LOGGER.debug(f"Entity {self.entity_id} initialized with count: {initial_value}")
-                # For HTML sensors - just set state (count), attributes come from sensor_attributes
-                elif self._entity_id in [ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW]:
-                    self._attr_native_value = initial_value
-                    LOGGER.debug(f"Entity {self.entity_id} initialized with count: {initial_value}")
-                # For window sensors - store in _window_data
-                elif self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
-                                          ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
-                    self._window_data = initial_value
-                    LOGGER.debug(f"Entity {self.entity_id} initialized with window data")
-                # For timestamp sensor - ISO string must be converted to timezone-aware datetime
-                elif self._entity_id == ENTITY_LAST_UPDATE:
-                    try:
-                        from datetime import datetime
-                        self._attr_native_value = datetime.fromisoformat(initial_value)
-                    except (TypeError, ValueError):
-                        self._attr_native_value = None
-                    LOGGER.debug(f"Entity {self.entity_id} initialized with timestamp: {self._attr_native_value}")
-                # For other sensors - normal value
-                else:
-                    self._attr_native_value = initial_value
-                    LOGGER.debug(f"Entity {self.entity_id} initialized with value from sensor_states: {initial_value}")
-            else:
-                LOGGER.debug(f"Entity {self.entity_id} initialized with default value")
-        
+                self._set_value(initial_value)
+
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{DOMAIN}_feedback_update_{self._entry_id}",
-                self._handle_feedback_update,
-            )
+            async_dispatcher_connect(self.hass, SIGNAL_FEEDBACK_UPDATE.format(self._entry_id), self._handle_feedback_update)
         )
-        
-        # Track device registry changes to update entity name immediately when device name changes
-        from homeassistant.helpers.device_registry import async_get as async_get_device_registry, EVENT_DEVICE_REGISTRY_UPDATED
-        from homeassistant.helpers.event import async_track_entity_registry_updated_event
-        
-        @callback
-        def device_registry_updated(event):
-            """Handle device registry update - refresh entity name."""
-            # Check if this event is for our device
-            if event.data.get("device_id"):
-                device_registry = async_get_device_registry(self.hass)
-                device = device_registry.async_get(event.data["device_id"])
-                if device and (DOMAIN, self._entry_id) in device.identifiers:
-                    # Device name changed - update entity state to refresh the name
-                    self.async_write_ha_state()
-        
         self.async_on_remove(
-            self.hass.bus.async_listen(EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated)
+            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
 
     @callback
     def _handle_feedback_update(self) -> None:
         """Handle feedback update."""
-        # Duration sensors are computed from number_values and time_values, not from sensor_states
-        if self._entity_id in [ENTITY_LOWEST_WINDOW_SIZE_TIME, ENTITY_HIGHEST_WINDOW_SIZE_TIME,
-                                ENTITY_LOWEST_SEARCH_WINDOW_SIZE, ENTITY_HIGHEST_SEARCH_WINDOW_SIZE]:
-            # These sensors are always available if Calculator device
-            if self._device_type == DEVICE_TYPE_CALCULATOR:
-                self._attr_available = True
-                # Value is computed in native_value property, no need to set it here
-                self.async_write_ha_state()
-                LOGGER.debug(f"Updated duration sensor {self.entity_id}")
+        if self._entity_id in DURATION_SENSORS:
+            # Computed from number_values and time_values in native_value
+            self.async_write_ha_state()
             return
-        
+
         new_value = self._instance.sensor_states.get(self._entity_id)
-        
-        LOGGER.debug(f"Feedback update for {self.entity_id}: entity_id_key={self._entity_id}, new_value_length={len(str(new_value)) if new_value else 0}")
-        
-        # For Window device sensors, if value is None, sensor is unavailable
+        # Calculator sensors without a value are unavailable
         if self._device_type == DEVICE_TYPE_CALCULATOR and new_value is None:
             self._attr_available = False
         else:
             self._attr_available = True
-            
-            # For prices sensors - just update the state (count), attributes come from sensor_attributes
-            if self._entity_id in [ENTITY_PRICES_TODAY, ENTITY_PRICES_TOMORROW]:
-                self._attr_native_value = new_value
-                if new_value:
-                    LOGGER.debug(f"Updated {self.entity_id} with {new_value} records")
-            
-            # For HTML table sensors - just update the state (count), attributes come from sensor_attributes
-            elif self._entity_id in [ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW]:
-                self._attr_native_value = new_value
-                if new_value:
-                    LOGGER.debug(f"Updated {self.entity_id} with {new_value} records")
-            
-            # For window sensors - store in _window_data
-            elif self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
-                                      ENTITY_HIGHEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
-                self._window_data = new_value
-                if new_value:
-                    try:
-                        import json
-                        data = json.loads(new_value)
-                        if data.get('found'):
-                            LOGGER.debug(f"Updated {self.entity_id} with window data: {data.get('start_time_local')} - {data.get('end_time_local')}, avg: {data.get('avg_price')}")
-                        else:
-                            LOGGER.debug(f"Updated {self.entity_id}: window not found")
-                    except Exception as e:
-                        LOGGER.error(f"Error parsing window JSON for {self.entity_id}: {e}")
-                        self._window_data = None
-                else:
-                    self._window_data = None
-            
-            # For ENTITY_LAST_UPDATE - parse ISO string to datetime
-            elif self._entity_id == ENTITY_LAST_UPDATE:
-                if new_value:
-                    try:
-                        from datetime import datetime
-                        self._attr_native_value = datetime.fromisoformat(new_value)
-                        LOGGER.debug(f"Updated {self.entity_id} with timestamp: {self._attr_native_value}")
-                    except Exception as e:
-                        LOGGER.error(f"Error parsing timestamp for {self.entity_id}: {e}")
-                        self._attr_native_value = None
-                else:
-                    self._attr_native_value = None
-            
-            # For all other sensors - normal update
-            else:
-                self._attr_native_value = new_value
-        
-        # Force state update
+            self._set_value(new_value)
         self.async_write_ha_state()
-        
-        LOGGER.debug(f"Updated {self.entity_id} complete")
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return the state attributes."""
-        # For prices_today and prices_tomorrow - return attributes from sensor_attributes (managed by okte.py)
-        if self._entity_id in [ENTITY_PRICES_TODAY, ENTITY_PRICES_TOMORROW]:
-            return self._instance.sensor_attributes.get(self._entity_id, {})
-        
-        # For HTML tables - return attributes from sensor_attributes (managed by okte.py)
-        elif self._entity_id in [ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW]:
-            return self._instance.sensor_attributes.get(self._entity_id, {})
-        
-        # For current price, min/max price sensors - return attributes from sensor_attributes (managed by okte.py)
-        elif self._entity_id in [ENTITY_CURRENT_PRICE, ENTITY_MIN_PRICE_TODAY, ENTITY_MAX_PRICE_TODAY,
-                                  ENTITY_MIN_PRICE_TOMORROW, ENTITY_MAX_PRICE_TOMORROW]:
-            return self._instance.sensor_attributes.get(self._entity_id, {})
-        
-        # For connection status and last update - return attributes from sensor_attributes (managed by okte.py)
-        elif self._entity_id in [ENTITY_CONNECTION_STATUS, ENTITY_LAST_UPDATE]:
-            return self._instance.sensor_attributes.get(self._entity_id, {})
-        
-        # For window sensors - return all window data in attributes
-        elif self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
-                                  ENTITY_HIGHEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
-            if hasattr(self, '_window_data') and self._window_data:
-                try:
-                    import json
-                    data = json.loads(self._window_data)
-                    
-                    # Determine if this is lowest or highest window
-                    is_lowest = 'lowest' in self._entity_id
-                    
-                    # Calculate window size and search window size
-                    if is_lowest:
-                        # Window size from number entity
-                        if hasattr(self._instance, 'number_values'):
-                            periods = data.get('periods') or self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
-                            total_minutes = periods * 15
-                            hours = total_minutes // 60
-                            minutes = total_minutes % 60
-                            window_size_value = f"{hours}:{minutes:02d}"
-                        else:
-                            window_size_value = "0:00"
-                        
-                        # Search window size from time entities
-                        if hasattr(self._instance, 'time_values'):
-                            from datetime import datetime
-                            time_from = self._instance.time_values.get(ENTITY_LOWEST_TIME_FROM)
-                            time_to = self._instance.time_values.get(ENTITY_LOWEST_TIME_TO)
-                            
-                            if time_from and time_to:
-                                dt_from = datetime.combine(datetime.today(), time_from)
-                                dt_to = datetime.combine(datetime.today(), time_to)
-                                diff = abs(dt_to - dt_from)
-                                total_minutes = int(diff.total_seconds() / 60)
-                                if self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW]:
-                                    # Main sensors search from time_from today to time_to tomorrow
-                                    from_min = time_from.hour * 60 + time_from.minute
-                                    to_min = 1440 if (time_to.hour == 23 and time_to.minute == 59) else time_to.hour * 60 + time_to.minute
-                                    total_minutes = (1440 - from_min) + to_min
-                                hours = total_minutes // 60
-                                minutes = total_minutes % 60
-                                search_window_size_value = f"{hours}:{minutes:02d}"
-                            else:
-                                search_window_size_value = "0:00"
-                        else:
-                            search_window_size_value = "0:00"
-                    else:
-                        # Window size from number entity
-                        if hasattr(self._instance, 'number_values'):
-                            periods = data.get('periods') or self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
-                            total_minutes = periods * 15
-                            hours = total_minutes // 60
-                            minutes = total_minutes % 60
-                            window_size_value = f"{hours}:{minutes:02d}"
-                        else:
-                            window_size_value = "0:00"
-                        
-                        # Search window size from time entities
-                        if hasattr(self._instance, 'time_values'):
-                            from datetime import datetime
-                            time_from = self._instance.time_values.get(ENTITY_HIGHEST_TIME_FROM)
-                            time_to = self._instance.time_values.get(ENTITY_HIGHEST_TIME_TO)
-                            
-                            if time_from and time_to:
-                                dt_from = datetime.combine(datetime.today(), time_from)
-                                dt_to = datetime.combine(datetime.today(), time_to)
-                                diff = abs(dt_to - dt_from)
-                                total_minutes = int(diff.total_seconds() / 60)
-                                if self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW]:
-                                    # Main sensors search from time_from today to time_to tomorrow
-                                    from_min = time_from.hour * 60 + time_from.minute
-                                    to_min = 1440 if (time_to.hour == 23 and time_to.minute == 59) else time_to.hour * 60 + time_to.minute
-                                    total_minutes = (1440 - from_min) + to_min
-                                hours = total_minutes // 60
-                                minutes = total_minutes % 60
-                                search_window_size_value = f"{hours}:{minutes:02d}"
-                            else:
-                                search_window_size_value = "0:00"
-                        else:
-                            search_window_size_value = "0:00"
-                    
-                    if data.get('found'):
-                        return {
-                            "found": True,
-                            "start_time_UTC": data.get('start_time_UTC'),
-                            "end_time_UTC": data.get('end_time_UTC'),
-                            "start_time_local": data.get('start_time_local'),
-                            "end_time_local": data.get('end_time_local'),
-                            "periods": data.get('periods'),
-                            "window_size": window_size_value,
-                            "window_search_size": search_window_size_value,
-                            "min_price": data.get('min_price'),
-                            "max_price": data.get('max_price'),
-                            "avg_price": data.get('avg_price'),
-                            "records": data.get('records', [])
-                        }
-                    else:
-                        # Window not found - return structure with null values
-                        return {
-                            "found": False,
-                            "message": data.get('message', 'Window not found'),
-                            "periods": data.get('periods'),
-                            "window_size": window_size_value,
-                            "window_search_size": search_window_size_value,
-                            "min_price": None,
-                            "max_price": None,
-                            "avg_price": None,
-                            "records": []
-                        }
-                except Exception:
-                    return {}
-            # No data available - return structure with null values
+    def _window_attributes(self) -> dict[str, Any]:
+        """Attributes of the window sensors."""
+        if not self._window_data:
             return {
                 "found": False,
                 "message": "No data available",
@@ -812,171 +346,109 @@ class SensorEntityDefinition(SensorEntity):
                 "min_price": None,
                 "max_price": None,
                 "avg_price": None,
-                "records": []
+                "records": [],
             }
-        
-        # For duration sensors - add periods only
-        elif self._entity_id in [ENTITY_LOWEST_WINDOW_SIZE_TIME, ENTITY_HIGHEST_WINDOW_SIZE_TIME]:
-            attrs = {}
-            
-            # Determine if this is lowest or highest
-            is_lowest = self._entity_id == ENTITY_LOWEST_WINDOW_SIZE_TIME
-            
-            if hasattr(self._instance, 'number_values'):
-                # Get periods from number entity
-                if is_lowest:
-                    periods = self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
-                else:
-                    periods = self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
-                
-                attrs["periods"] = periods
-            
-            return attrs
-        
-        # For search window size sensors - add start/end times
-        elif self._entity_id in [ENTITY_LOWEST_SEARCH_WINDOW_SIZE, ENTITY_HIGHEST_SEARCH_WINDOW_SIZE]:
-            attrs = {}
-            
-            # Determine if this is lowest or highest
-            is_lowest = self._entity_id == ENTITY_LOWEST_SEARCH_WINDOW_SIZE
-            
-            if hasattr(self._instance, 'time_values'):
-                from datetime import datetime
-                import zoneinfo
-                
-                # Get times from time entities
-                if is_lowest:
-                    time_from = self._instance.time_values.get(ENTITY_LOWEST_TIME_FROM)
-                    time_to = self._instance.time_values.get(ENTITY_LOWEST_TIME_TO)
-                else:
-                    time_from = self._instance.time_values.get(ENTITY_HIGHEST_TIME_FROM)
-                    time_to = self._instance.time_values.get(ENTITY_HIGHEST_TIME_TO)
-                
-                # Convert local times to UTC
-                if time_from and time_to:
-                    try:
-                        # Get timezone
-                        ha_timezone = self.hass.config.time_zone
-                        tz_local = zoneinfo.ZoneInfo(ha_timezone)
-                        tz_utc = zoneinfo.ZoneInfo('UTC')
-                        
-                        # Create datetime objects for today with local timezone
-                        today = datetime.now(tz_local).date()
-                        dt_from_local = datetime.combine(today, time_from, tzinfo=tz_local)
-                        dt_to_local = datetime.combine(today, time_to, tzinfo=tz_local)
-                        
-                        # Convert to UTC
-                        dt_from_utc = dt_from_local.astimezone(tz_utc)
-                        dt_to_utc = dt_to_local.astimezone(tz_utc)
-                        
-                        # Format times
-                        attrs["start_time_local"] = dt_from_local.strftime("%H:%M")
-                        attrs["end_time_local"] = dt_to_local.strftime("%H:%M")
-                        attrs["start_time_UTC"] = f"UTC: {dt_from_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-                        attrs["end_time_UTC"] = f"UTC: {dt_to_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-                    except Exception as e:
-                        LOGGER.error(f"Error converting times to UTC: {e}")
-                        attrs["start_time_local"] = None
-                        attrs["end_time_local"] = None
-                        attrs["start_time_UTC"] = None
-                        attrs["end_time_UTC"] = None
-                else:
-                    attrs["start_time_local"] = None
-                    attrs["end_time_local"] = None
-                    attrs["start_time_UTC"] = None
-                    attrs["end_time_UTC"] = None
-            
-            return attrs
-        
-        # For other sensors with configured attributes - return from config
-        elif self._attributes_config:
-            return self._attributes_config
-        
-        # For other sensors - no extra attributes
-        return {}
-    
+        try:
+            data = json.loads(self._window_data)
+        except (TypeError, ValueError):
+            return {}
+
+        is_lowest = 'lowest' in self._entity_id
+        number_key = ENTITY_LOWEST_WINDOW_SIZE if is_lowest else ENTITY_HIGHEST_WINDOW_SIZE
+        time_keys = (ENTITY_LOWEST_TIME_FROM, ENTITY_LOWEST_TIME_TO) if is_lowest else (ENTITY_HIGHEST_TIME_FROM, ENTITY_HIGHEST_TIME_TO)
+        window_size_value = _window_size_value(self._instance, number_key, data.get('periods'))
+        search_window_size_value = _search_window_value(self._instance, time_keys, self._entity_id in CROSS_DAY_WINDOW_SENSORS)
+
+        if data.get('found'):
+            return {
+                "found": True,
+                "start_time_UTC": data.get('start_time_UTC'),
+                "end_time_UTC": data.get('end_time_UTC'),
+                "start_time_local": data.get('start_time_local'),
+                "end_time_local": data.get('end_time_local'),
+                "periods": data.get('periods'),
+                "window_size": window_size_value,
+                "window_search_size": search_window_size_value,
+                "min_price": data.get('min_price'),
+                "max_price": data.get('max_price'),
+                "avg_price": data.get('avg_price'),
+                "records": data.get('records', []),
+            }
+        return {
+            "found": False,
+            "message": data.get('message', 'Window not found'),
+            "periods": data.get('periods'),
+            "window_size": window_size_value,
+            "window_search_size": search_window_size_value,
+            "min_price": None,
+            "max_price": None,
+            "avg_price": None,
+            "records": [],
+        }
+
+    def _search_window_attributes(self) -> dict[str, Any]:
+        """Start/end of the search range (market time and UTC)."""
+        empty = {"start_time_local": None, "end_time_local": None, "start_time_UTC": None, "end_time_UTC": None}
+        if not hasattr(self._instance, 'time_values'):
+            return {}
+        time_from_key, time_to_key = SEARCH_WINDOW_SIZE_SENSORS[self._entity_id]
+        time_from = self._instance.time_values.get(time_from_key)
+        time_to = self._instance.time_values.get(time_to_key)
+        if not (time_from and time_to):
+            return empty
+        today = datetime.now(MARKET_TIMEZONE).date()
+        dt_from = datetime.combine(today, time_from, tzinfo=MARKET_TIMEZONE)
+        dt_to = datetime.combine(today, time_to, tzinfo=MARKET_TIMEZONE)
+        return {
+            "start_time_local": dt_from.strftime("%H:%M"),
+            "end_time_local": dt_to.strftime("%H:%M"),
+            "start_time_UTC": f"UTC: {dt_from.astimezone(dt_util.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "end_time_UTC": f"UTC: {dt_to.astimezone(dt_util.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        }
+
     @property
-    def native_value(self) -> str | int | float | None:
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if self._entity_id in INSTANCE_ATTRIBUTE_SENSORS:
+            return self._instance.sensor_attributes.get(self._entity_id, {})
+        if self._entity_id in WINDOW_SENSORS:
+            return self._window_attributes()
+        if self._entity_id in WINDOW_SIZE_SENSORS:
+            if hasattr(self._instance, 'number_values'):
+                return {"periods": self._instance.number_values.get(WINDOW_SIZE_SENSORS[self._entity_id], 3)}
+            return {}
+        if self._entity_id in SEARCH_WINDOW_SIZE_SENSORS:
+            return self._search_window_attributes()
+        return {}
+
+    @property
+    def native_value(self) -> str | int | float | datetime | None:
         """Return the state of the sensor."""
-        # For prices sensors - return count as state (set by okte.py)
-        if self._entity_id in [ENTITY_PRICES_TODAY, ENTITY_PRICES_TOMORROW]:
-            return self._attr_native_value
-        
-        # For HTML table sensors - return state directly (count set by okte.py)
-        elif self._entity_id in [ENTITY_HTML_TABLE_TODAY, ENTITY_HTML_TABLE_TOMORROW]:
-            return self._attr_native_value
-        
-        # For window sensors - return STATE_WINDOW_FOUND/STATE_WINDOW_NOT_FOUND based on whether window was found
-        elif self._entity_id in [ENTITY_LOWEST_PRICE_WINDOW, ENTITY_LOWEST_PRICE_WINDOW_TODAY, ENTITY_LOWEST_PRICE_WINDOW_TOMORROW,
-                                  ENTITY_HIGHEST_PRICE_WINDOW, ENTITY_HIGHEST_PRICE_WINDOW_TODAY, ENTITY_HIGHEST_PRICE_WINDOW_TOMORROW]:
-            if hasattr(self, '_window_data') and self._window_data:
+        if self._entity_id in WINDOW_SENSORS:
+            if self._window_data:
                 try:
-                    import json
-                    data = json.loads(self._window_data)
-                    if data.get('found'):
-                        return STATE_WINDOW_FOUND
-                    return STATE_WINDOW_NOT_FOUND
-                except Exception:
-                    return STATE_WINDOW_NOT_FOUND
+                    return STATE_WINDOW_FOUND if json.loads(self._window_data).get('found') else STATE_WINDOW_NOT_FOUND
+                except (TypeError, ValueError):
+                    pass
             return STATE_WINDOW_NOT_FOUND
-        
-        # Duration sensors - window size in H:MM format (periods * 15 minutes)
-        elif self._entity_id == ENTITY_LOWEST_WINDOW_SIZE_TIME:
-            if hasattr(self._instance, 'number_values'):
-                periods = self._instance.number_values.get(ENTITY_LOWEST_WINDOW_SIZE, 3)
-                total_minutes = periods * 15
-                hours = total_minutes // 60
-                minutes = total_minutes % 60
-                return f"{hours}:{minutes:02d}"
-            return "0:00"
-        
-        elif self._entity_id == ENTITY_HIGHEST_WINDOW_SIZE_TIME:
-            if hasattr(self._instance, 'number_values'):
-                periods = self._instance.number_values.get(ENTITY_HIGHEST_WINDOW_SIZE, 3)
-                total_minutes = periods * 15
-                hours = total_minutes // 60
-                minutes = total_minutes % 60
-                return f"{hours}:{minutes:02d}"
-            return "0:00"
-        
-        # Search window size - time difference between from and to
-        elif self._entity_id == ENTITY_LOWEST_SEARCH_WINDOW_SIZE:
-            if hasattr(self._instance, 'time_values'):
-                from datetime import datetime, timedelta
-                time_from = self._instance.time_values.get(ENTITY_LOWEST_TIME_FROM)
-                time_to = self._instance.time_values.get(ENTITY_LOWEST_TIME_TO)
-                
-                if time_from and time_to:
-                    # Convert times to datetime for calculation
-                    dt_from = datetime.combine(datetime.today(), time_from)
-                    dt_to = datetime.combine(datetime.today(), time_to)
-                    
-                    # Calculate difference (absolute value)
-                    diff = abs(dt_to - dt_from)
-                    total_minutes = int(diff.total_seconds() / 60)
-                    hours = total_minutes // 60
-                    minutes = total_minutes % 60
-                    return f"{hours}:{minutes:02d}"
-            return "0:00"
-        
-        elif self._entity_id == ENTITY_HIGHEST_SEARCH_WINDOW_SIZE:
-            if hasattr(self._instance, 'time_values'):
-                from datetime import datetime, timedelta
-                time_from = self._instance.time_values.get(ENTITY_HIGHEST_TIME_FROM)
-                time_to = self._instance.time_values.get(ENTITY_HIGHEST_TIME_TO)
-                
-                if time_from and time_to:
-                    # Convert times to datetime for calculation
-                    dt_from = datetime.combine(datetime.today(), time_from)
-                    dt_to = datetime.combine(datetime.today(), time_to)
-                    
-                    # Calculate difference (absolute value)
-                    diff = abs(dt_to - dt_from)
-                    total_minutes = int(diff.total_seconds() / 60)
-                    hours = total_minutes // 60
-                    minutes = total_minutes % 60
-                    return f"{hours}:{minutes:02d}"
-            return "0:00"
-        
-        # For all other sensors - return actual value
+        if self._entity_id in WINDOW_SIZE_SENSORS:
+            return _window_size_value(self._instance, WINDOW_SIZE_SENSORS[self._entity_id])
+        if self._entity_id in SEARCH_WINDOW_SIZE_SENSORS:
+            return _search_window_value(self._instance, SEARCH_WINDOW_SIZE_SENSORS[self._entity_id])
+        if self._price_factor != 1 and isinstance(self._attr_native_value, (int, float)):
+            return round(self._attr_native_value * self._price_factor, 5)
         return self._attr_native_value
+
+
+class LargeAttributesSensor(SensorEntityDefinition):
+    """Sensor with very large attributes - they are shown in the UI but not stored in the recorder database."""
+
+    _unrecorded_attributes = frozenset({
+        # prices today/tomorrow
+        "period_data", "prices_list", "timestamps_list", "labels_list",
+        # HTML tables
+        "html_table",
+        # failover profiles
+        "Period data Monday", "Period data Tuesday", "Period data Wednesday", "Period data Thursday",
+        "Period data Friday", "Period data Saturday", "Period data Sunday",
+    })

@@ -8,128 +8,72 @@ from __future__ import annotations
 """ Button platform for OKTE integration."""
 
 import logging
-from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import EntityCategory, DeviceInfo
 
 from .const import (
-    DOMAIN,
     DEVICE_TYPE_MASTER,
-    DEVICE_TYPE_CALCULATOR,
+    DOCUMENTATION_URL,
+    DOMAIN,
+    ENTITY_PREFIX,
     MANUFACTURER,
     MODEL_MASTER,
+    SIGNAL_FEEDBACK_UPDATE,
+    SIGNAL_NAME_UPDATE,
     VERSION,
-    DOCUMENTATION_URL,
+    async_load_translations,
 )
 
 LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up button entities."""
+    """Set up button entities (Master device only)."""
+    if entry.runtime_data.device_type != DEVICE_TYPE_MASTER:
+        return
     instance = entry.runtime_data.instance
-    device_type = entry.runtime_data.device_type
-    
-    # Load translations
-    translations = await _load_translations(hass)
-    
-    entities = []
-    
-    # Button is only for Master device
-    if device_type == DEVICE_TYPE_MASTER:
-        entities = [
-            UpdateDataButton(
-                hass,
-                instance,
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                translations=translations,
-            )
-        ]
-    
-    async_add_entities(entities)
-
-async def _load_translations(hass: HomeAssistant) -> dict:
-    """Load translations for entity names."""
-    import json
-    from pathlib import Path
-    
-    def _sync_load_translations() -> dict:
-        """Synchronous translation loading."""
-        language = hass.config.language or "en"
-        integration_dir = Path(__file__).parent
-        
-        # Try to load language-specific translations
-        translation_file = integration_dir / "translations" / f"{language}.json"
-        if translation_file.exists():
-            with open(translation_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        
-        # Fallback to strings.json
-        strings_file = integration_dir / "strings.json"
-        if strings_file.exists():
-            with open(strings_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        
-        return {}
-    
-    # Run blocking file I/O in executor to avoid blocking event loop
-    return await hass.async_add_executor_job(_sync_load_translations)
+    translations = await async_load_translations(hass)
+    async_add_entities([
+        UpdateDataButton(hass, instance, entry.entry_id, translations),
+        ResetFailoverHistoryButton(hass, instance, entry.entry_id, translations),
+    ])
 
 
-class UpdateDataButton(ButtonEntity):
-    """Button to manually update data from API."""
-    
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        instance,
-        entry_id: str,
-        device_type: str,
-        translations: dict = None,
-    ) -> None:
+class OkteButton(ButtonEntity):
+    """Base class of the OKTE Master buttons."""
+
+    _key = ""
+    _default_name = ""
+    _icon = "mdi:gesture-tap-button"
+
+    def __init__(self, hass: HomeAssistant, instance, entry_id: str, translations: dict | None = None) -> None:
         """Initialize the button."""
         self.hass = hass
         self._instance = instance
         self._entry_id = entry_id
-        self._device_type = device_type
-        
-        from .const import ENTITY_PREFIX
-        
-        # Master: okte_update_data
-        self.entity_id = f"button.{ENTITY_PREFIX}_update_data"
-        
-        self._attr_unique_id = f"{DOMAIN}_{entry_id}_update_data"
+
+        self.entity_id = f"button.{ENTITY_PREFIX}_{self._key}"
+        self._attr_unique_id = f"{DOMAIN}_{entry_id}_{self._key}"
         self._attr_has_entity_name = False
-        self._attr_translation_key = "update_data"
-        
-        # Get translated name
-        translated_name = "Update Data"  # Default fallback
-        if translations:
-            entity_trans = translations.get("entity", {}).get("button", {}).get("update_data", {})
-            trans_name = entity_trans.get("name")
-            if trans_name:
-                translated_name = trans_name
-        
-        # Store translated name for later use
-        self._translated_name = translated_name
-        
-        # Apply prefix if checkbox is enabled
-        if instance.settings.include_device_name_in_entity:
-            self._attr_name = f"OKTE - {translated_name}"
-        else:
-            self._attr_name = translated_name
-        
-        self._attr_icon = "mdi:refresh"
+        self._attr_translation_key = self._key
+        self._attr_icon = self._icon
         self._attr_entity_category = EntityCategory.CONFIG
-    
+
+        translated = (translations or {}).get("entity", {}).get("button", {}).get(self._key, {}).get("name")
+        self._translated_name = translated or self._default_name
+        self._attr_name = (
+            f"OKTE - {self._translated_name}" if instance.settings.include_device_name_in_entity else self._translated_name
+        )
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info."""
@@ -141,21 +85,50 @@ class UpdateDataButton(ButtonEntity):
             sw_version=VERSION,
             configuration_url=DOCUMENTATION_URL,
         )
-    
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
+        )
+
+    def _notify_entities(self) -> None:
+        """Refresh all entities of the Master device."""
+        async_dispatcher_send(self.hass, SIGNAL_FEEDBACK_UPDATE.format(self._entry_id))
+
+
+class UpdateDataButton(OkteButton):
+    """Button to manually update data from API."""
+
+    _key = "update_data"
+    _default_name = "Update Data"
+    _icon = "mdi:refresh"
+
     async def async_press(self) -> None:
         """Handle button press - fetch data from API."""
-        LOGGER.info("=== MANUAL DATA UPDATE REQUESTED VIA BUTTON ===")
-        
+        LOGGER.debug("Manual data update requested via button")
         try:
-            # Call the fetch_and_process_data method
-            LOGGER.info("Calling fetch_and_process_data()...")
             await self._instance.fetch_and_process_data()
-            
-            # Send update signal to all entities
-            from homeassistant.helpers.dispatcher import async_dispatcher_send
-            LOGGER.info(f"Sending dispatcher signal: {DOMAIN}_feedback_update_{self._entry_id}")
-            async_dispatcher_send(self.hass, f"{DOMAIN}_feedback_update_{self._entry_id}")
-            
-            LOGGER.info("=== MANUAL DATA UPDATE COMPLETED SUCCESSFULLY ===")
+            self._notify_entities()
         except Exception as e:
-            LOGGER.error(f"Error during manual data update: {e}", exc_info=True)
+            LOGGER.error("Error during manual data update: %s", e, exc_info=True)
+
+
+class ResetFailoverHistoryButton(OkteButton):
+    """Button to reset the failover price history and rebuild it from statistics of the current price sensor."""
+
+    _key = "reset_failover_history"
+    _default_name = "Reset Failover History"
+    _icon = "mdi:database-refresh"
+
+    async def async_press(self) -> None:
+        """Handle button press - reset failover history and rebuild it from statistics."""
+        LOGGER.info("Failover history reset requested via button")
+        try:
+            rebuilt = await self._instance.async_reset_failover_history()
+            self._notify_entities()
+            if not rebuilt:
+                LOGGER.warning("Failover history reset finished without data from statistics")
+        except Exception as e:
+            LOGGER.error("Error during failover history reset: %s", e, exc_info=True)

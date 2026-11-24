@@ -8,149 +8,69 @@ from __future__ import annotations
 """ Binary Sensor platform for OKTE Integration."""
 
 import logging
-import json
 
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import EntityCategory, DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import *
+from .const import (
+    DEVICE_TYPE_CALCULATOR,
+    DEVICE_TYPE_MASTER,
+    DOCUMENTATION_URL,
+    DOMAIN,
+    ENTITY_DETECTOR_HIGHEST_PRICE,
+    ENTITY_DETECTOR_HIGHEST_PRICE_TODAY,
+    ENTITY_DETECTOR_LOWEST_PRICE,
+    ENTITY_DETECTOR_LOWEST_PRICE_TODAY,
+    ENTITY_PREFIX,
+    MANUFACTURER,
+    MODEL_CALCULATOR,
+    MODEL_MASTER,
+    SIGNAL_FEEDBACK_UPDATE,
+    SIGNAL_NAME_UPDATE,
+    VERSION,
+    async_load_translations,
+    get_calculator_number_from_name,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-async def _load_translations(hass: HomeAssistant) -> dict:
-    """Load translations for the current language."""
-    import json
-    import os
-    
-    def _load_file():
-        try:
-            language = hass.config.language if hass else "en"
-            
-            translations_path = os.path.join(os.path.dirname(__file__), "translations", f"{language}.json")
-            
-            if not os.path.exists(translations_path):
-                translations_path = os.path.join(os.path.dirname(__file__), "strings.json")
-            
-            if os.path.exists(translations_path):
-                with open(translations_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception:
-            pass
-        return {}
-    
-    return await hass.async_add_executor_job(_load_file)
+# (key, fallback name, icon)
+CALCULATOR_BINARY_SENSORS = (
+    (ENTITY_DETECTOR_LOWEST_PRICE, "Detector Lowest Price", "mdi:clock-check"),
+    (ENTITY_DETECTOR_LOWEST_PRICE_TODAY, "Detector Lowest Price Today", "mdi:clock-check"),
+    (ENTITY_DETECTOR_HIGHEST_PRICE, "Detector Highest Price", "mdi:clock-alert"),
+    (ENTITY_DETECTOR_HIGHEST_PRICE_TODAY, "Detector Highest Price Today", "mdi:clock-alert"),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up binary sensor entities."""
-    instance = entry.runtime_data.instance
+    """Set up binary sensor entities (Calculator devices only)."""
     device_type = entry.runtime_data.device_type
-    
-    translations = await _load_translations(hass)
+    if device_type != DEVICE_TYPE_CALCULATOR:
+        return
 
-    entities = []
-    
-    # Binary sensors are only for Window devices
-    if device_type == DEVICE_TYPE_CALCULATOR:
-        entities = [
-            BinarySensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_DETECTOR_LOWEST_PRICE, 
-                name="Detector Lowest Price",
-                translations=translations, 
-                icon="mdi:clock-check",
-                default_value=False,
-                enabled_by_default=True,
-            ),
-            BinarySensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_DETECTOR_LOWEST_PRICE_TODAY, 
-                name="Detector Lowest Price Today",
-                translations=translations, 
-                icon="mdi:clock-check",
-                default_value=False,
-                enabled_by_default=True,
-            ),
-            BinarySensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_DETECTOR_HIGHEST_PRICE, 
-                name="Detector Highest Price",
-                translations=translations, 
-                icon="mdi:clock-alert",
-                default_value=False,
-                enabled_by_default=True,
-            ),
-            BinarySensorEntityDefinition(
-                hass,
-                instance, 
-                entry_id=entry.entry_id,
-                device_type=device_type,
-                entity_id=ENTITY_DETECTOR_HIGHEST_PRICE_TODAY, 
-                name="Detector Highest Price Today",
-                translations=translations, 
-                icon="mdi:clock-alert",
-                default_value=False,
-                enabled_by_default=True,
-            ),
-        ]
+    instance = entry.runtime_data.instance
+    translations = await async_load_translations(hass)
+    async_add_entities(
+        BinarySensorEntityDefinition(
+            hass, instance, entry_id=entry.entry_id, device_type=device_type,
+            entity_id=key, name=name, translations=translations, icon=icon,
+        )
+        for key, name, icon in CALCULATOR_BINARY_SENSORS
+    )
 
-    async_add_entities(entities)
 
 class BinarySensorEntityDefinition(BinarySensorEntity):
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        model = MODEL_MASTER if self._device_type == DEVICE_TYPE_MASTER else MODEL_CALCULATOR
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._instance.settings.device_name,
-            manufacturer=MANUFACTURER,
-            model=model,
-            sw_version=VERSION,
-            configuration_url=DOCUMENTATION_URL,
-        )
-    
-    @property
-    def name(self) -> str:
-        """Return the name of the entity - dynamically generated."""
-        translated_name = self._original_translated_name
-        
-        # Apply prefix based on device type and checkbox setting
-        if self._instance.settings.include_device_name_in_entity:
-            if self._device_type == DEVICE_TYPE_MASTER:
-                # Master: "OKTE - {translated_name}"
-                return f"OKTE - {translated_name}"
-            else:
-                # Calculator: "OKTE - {device_label} - {translated_name}"
-                # Get device label from Home Assistant (the name user sets in native HA dialog)
-                device_entry = self.device_entry
-                
-                if device_entry and device_entry.name_by_user:
-                    device_label = device_entry.name_by_user
-                else:
-                    # Fallback to automatic name if user hasn't set custom name
-                    device_label = self._instance.settings.device_name
-                
-                return f"OKTE - {device_label} - {translated_name}"
-        else:
-            # No prefix - just translated name
-            return translated_name
+    """OKTE detector - ON while the current time is inside the found price window."""
 
     def __init__(
         self,
@@ -162,127 +82,81 @@ class BinarySensorEntityDefinition(BinarySensorEntity):
         name: str,
         translations: dict = None,
         icon: str = "mdi:eye",
-        default_value: bool = False,
-        enabled_by_default: bool = True,
-        device_class: BinarySensorDeviceClass | None = None,
-        entity_category: EntityCategory | None = None,
-        available: bool = True,
     ) -> None:
         """Initialize the binary sensor."""
         self.hass = hass
         self._instance = instance
         self._entry_id = entry_id
         self._device_type = device_type
-        
-        from .const import ENTITY_PREFIX, get_calculator_number_from_name
-        
-        # Generate entity_id based on device type
+        self._entity_id = entity_id
+
         if device_type == DEVICE_TYPE_MASTER:
-            # Master: okte_{entity_name}
             self.entity_id = f"binary_sensor.{ENTITY_PREFIX}_{entity_id}"
         else:
-            # Calculator: okte_N_{entity_name}
             calculator_number = get_calculator_number_from_name(instance.settings.device_name)
             self.entity_id = f"binary_sensor.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
-        
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{entity_id}"
-        
-        # Get translated name from translations
-        translated_name = name  # Default fallback
-        if translations:
-            entity_trans = translations.get("entity", {}).get("binary_sensor", {}).get(entity_id, {})
-            trans_name = entity_trans.get("name")
-            if trans_name:
-                translated_name = trans_name
-        
-        # Store original translated name for dynamic name generation
-        self._original_translated_name = translated_name
-        
-        # Don't set _attr_name here - use property instead for dynamic updates
-        
-        self._attr_icon = icon
-        self._entity_id = entity_id
-        self._attr_is_on = default_value
-        self._attr_available = available
-        self._attr_entity_registry_enabled_default = enabled_by_default
-        self._attr_entity_registry_visible_default = enabled_by_default
 
-        if device_class is not None:
-            self._attr_device_class = device_class
-        if entity_category is not None:
-            self._attr_entity_category = entity_category
+        translated = (translations or {}).get("entity", {}).get("binary_sensor", {}).get(entity_id, {}).get("name")
+        self._original_translated_name = translated or name
+
+        self._attr_icon = icon
+        self._attr_is_on = False
+        self._attr_available = True
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name=self._instance.settings.device_name,
+            manufacturer=MANUFACTURER,
+            model=MODEL_MASTER if self._device_type == DEVICE_TYPE_MASTER else MODEL_CALCULATOR,
+            sw_version=VERSION,
+            configuration_url=DOCUMENTATION_URL,
+        )
+
+    @property
+    def name(self) -> str:
+        """Return the name of the entity - dynamically generated."""
+        translated_name = self._original_translated_name
+        if not self._instance.settings.include_device_name_in_entity:
+            return translated_name
+        if self._device_type == DEVICE_TYPE_MASTER:
+            return f"OKTE - {translated_name}"
+        device_entry = self.device_entry
+        device_label = device_entry.name_by_user if device_entry and device_entry.name_by_user else self._instance.settings.device_name
+        return f"OKTE - {device_label} - {translated_name}"
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
-        
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{DOMAIN}_feedback_update_{self._entry_id}",
-                self._handle_feedback_update,
-            )
+            async_dispatcher_connect(self.hass, SIGNAL_FEEDBACK_UPDATE.format(self._entry_id), self._handle_feedback_update)
         )
-        
-        # Track device registry changes to update entity name immediately when device name changes
-        from homeassistant.helpers.device_registry import async_get as async_get_device_registry, EVENT_DEVICE_REGISTRY_UPDATED
-        from homeassistant.helpers.event import async_track_entity_registry_updated_event
-        
-        @callback
-        def device_registry_updated(event):
-            """Handle device registry update - refresh entity name."""
-            # Check if this event is for our device
-            if event.data.get("device_id"):
-                device_registry = async_get_device_registry(self.hass)
-                device = device_registry.async_get(event.data["device_id"])
-                if device and (DOMAIN, self._entry_id) in device.identifiers:
-                    # Device name changed - update entity state to refresh the name
-                    self.async_write_ha_state()
-        
         self.async_on_remove(
-            self.hass.bus.async_listen(EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated)
+            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self._handle_name_update)
         )
 
     @callback
     def _handle_feedback_update(self) -> None:
         """Handle feedback update."""
         new_value = self._instance.sensor_states.get(self._entity_id)
-        # Check if master is available for Window devices
-        if hasattr(self._instance, 'is_master_available'):
-            if not self._instance.is_master_available():
-                self._attr_available = False
-            else:
-                self._attr_available = True
-                if new_value is not None:
-                    self._attr_is_on = new_value
+        if hasattr(self._instance, 'is_master_available') and not self._instance.is_master_available():
+            self._attr_available = False
         else:
-            # Master device binary sensors (if any in future)
             self._attr_available = True
             if new_value is not None:
                 self._attr_is_on = new_value
-        
-        # Force state update to refresh name from @property
         self.async_write_ha_state()
-        
-        # Also force entity registry update to refresh displayed name
-        try:
-            from homeassistant.helpers import entity_registry as er
-            entity_registry = er.async_get(self.hass)
-            
-            # Get current entity entry
-            entity_entry = entity_registry.async_get(self.entity_id)
-            if entity_entry:
-                # Update with current name from @property
-                current_name = self.name
-                if entity_entry.name != current_name and entity_entry.original_name != current_name:
-                    entity_registry.async_update_entity(
-                        self.entity_id,
-                        original_name=current_name
-                    )
-        except Exception as e:
-            LOGGER.debug(f"Could not update entity registry: {e}")
 
-    @property
-    def is_on(self) -> bool:
-        """Return the state of the binary sensor."""
-        return self._attr_is_on
+    @callback
+    def _handle_name_update(self) -> None:
+        """Device renamed - write the state again and refresh the displayed name in the registry."""
+        self.async_write_ha_state()
+        entity_registry = er.async_get(self.hass)
+        entity_entry = entity_registry.async_get(self.entity_id)
+        if entity_entry:
+            current_name = self.name
+            if entity_entry.name != current_name and entity_entry.original_name != current_name:
+                entity_registry.async_update_entity(self.entity_id, original_name=current_name)

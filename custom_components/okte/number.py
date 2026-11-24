@@ -8,20 +8,28 @@ from __future__ import annotations
 """ Number platform for OKTE integration."""
 
 import logging
-from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    DOMAIN,
     CONF_DEVICE_TYPE,
     DEVICE_TYPE_CALCULATOR,
-    ENTITY_LOWEST_WINDOW_SIZE,
+    DOCUMENTATION_URL,
+    DOMAIN,
     ENTITY_HIGHEST_WINDOW_SIZE,
+    ENTITY_LOWEST_WINDOW_SIZE,
+    ENTITY_PREFIX,
+    MANUFACTURER,
+    MODEL_CALCULATOR,
+    SIGNAL_NAME_UPDATE,
+    VERSION,
+    async_load_translations,
+    get_calculator_number_from_name,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -32,34 +40,16 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up OKTE number entities."""
-    LOGGER.info(f"=== NUMBER PLATFORM CALLED === Entry ID: {config_entry.entry_id}")
-    
-    device_type = config_entry.data.get(CONF_DEVICE_TYPE)
-    LOGGER.info(f"Number platform setup, device_type: {device_type}")
-    
-    # Only Calculator devices have number entities
-    if device_type != DEVICE_TYPE_CALCULATOR:
-        LOGGER.info(f"Skipping number entities - not a Calculator device")
+    """Set up OKTE number entities (Calculator devices only)."""
+    if config_entry.data.get(CONF_DEVICE_TYPE) != DEVICE_TYPE_CALCULATOR:
         return
-    
-    # Get instance from runtime data
+
     instance = config_entry.runtime_data.instance
-    
-    LOGGER.info(f"Creating window size number entities")
-    
-    # Create only window size entities (time is now handled by time.py)
-    from .sensor import _load_translations
-    translations = await _load_translations(hass)
-    
-    numbers = [
+    translations = await async_load_translations(hass)
+    async_add_entities([
         OkteNumberEntity(hass, config_entry, instance, ENTITY_LOWEST_WINDOW_SIZE, translations),
         OkteNumberEntity(hass, config_entry, instance, ENTITY_HIGHEST_WINDOW_SIZE, translations),
-    ]
-    
-    LOGGER.info(f"Adding {len(numbers)} number entities")
-    async_add_entities(numbers, True)
-    LOGGER.info("Number entities added successfully")
+    ], True)
 
 
 class OkteNumberEntity(NumberEntity):
@@ -80,7 +70,6 @@ class OkteNumberEntity(NumberEntity):
         self._attr_native_unit_of_measurement = "periods"
         
         # Generate entity_id
-        from .const import ENTITY_PREFIX, get_calculator_number_from_name
         calculator_number = get_calculator_number_from_name(instance.settings.device_name)
         self.entity_id = f"number.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
         self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{entity_id}"
@@ -105,23 +94,9 @@ class OkteNumberEntity(NumberEntity):
                 self._handle_update
             )
         )
-        
-        # Track device registry changes to update entity name immediately when device name changes
-        from homeassistant.helpers.device_registry import async_get as async_get_device_registry, EVENT_DEVICE_REGISTRY_UPDATED
-        
-        @callback
-        def device_registry_updated(event):
-            """Handle device registry update - refresh entity name."""
-            # Check if this event is for our device
-            if event.data.get("device_id"):
-                device_registry = async_get_device_registry(self.hass)
-                device = device_registry.async_get(event.data["device_id"])
-                if device and (DOMAIN, self._entry_id) in device.identifiers:
-                    # Device name changed - update entity state to refresh the name
-                    self.async_write_ha_state()
-        
+        # Device renamed - write the state again to refresh the name
         self.async_on_remove(
-            self.hass.bus.async_listen(EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated)
+            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
     
     @callback
@@ -162,11 +137,8 @@ class OkteNumberEntity(NumberEntity):
         return f"{self.config_entry.entry_id}_{self._entity_id_key}"
     
     @property
-    def device_info(self) -> dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         """Return device info."""
-        from .const import MANUFACTURER, MODEL_CALCULATOR, VERSION, DOCUMENTATION_URL
-        from homeassistant.helpers.entity import DeviceInfo
-        
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self.instance.settings.device_name,
