@@ -247,11 +247,15 @@ cards:
       - entity: sensor.okte_html_table_today
       - entity: sensor.okte_html_table_tomorrow
       - type: divider
-      - entity: sensor.okte_error_code sensor
+      - entity: sensor.okte_failover_data
+      - type: divider
+      - entity: sensor.okte_error_code
       - entity: sensor.okte_data_count
       - entity: sensor.okte_connection_status
       - entity: sensor.okte_last_update
+      - type: divider
       - entity: button.okte_update_data
+      - entity: button.okte_reset_failover_history
     title: OKTE Master
     grid_options:
       columns: full
