@@ -24,6 +24,7 @@
 - 🔢 **Štatistické senzory** (min, max, priemerné ceny)
 - 🌓 **Integrácia východu/západu slnka** pre konfiguráciu časových okien
 - 🔧 **Viacero Calculator zariadení** pre nezávislé automatizačné scenáre
+- 🔀 **failover function** V prípade výpadku zdroja údajov sa použijú spriemerované ceny podľa jednotlivých periód a dní.
 
 ---
 
@@ -88,6 +89,7 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 - Zabezpečuje automatické sťahovanie údajov z OKTE API
 - Poskytuje cenové senzory, štatistiky a údaje pre Calculator zariadenia
 - **Predvolený čas sťahovania údajov: 14:00** (OKTE zverejňuje ceny na zajtra okolo 13:00)
+- Master zabezpečuje "failover function" ktorá použije v prípade výpadku zdroja údajov spriemerované ceny podľa jednotlivých periód a dní
 
 ![Konfigurácia OKTE Master](docs/images/sk_device_okte_master_configuration.jpg)
 
@@ -131,7 +133,7 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 
 ## 📡 OKTE Master zariadenie
 
-**OKTE Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
+**OKTE Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API, ukladanie údajov a výpočet priemerných cien pre prípad výpadku zdroja údajov. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
 
 ### Konfigurácia Master zariadenia
 
@@ -143,6 +145,19 @@ Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvo
 |-----------|-------------------|-------|
 | **Pridať prefix 'OKTE -' k názvom entít** | ✅ Zapnuté | Pridá prefix "okte_" ku všetkým ID entít |
 | **Denný čas sťahovania** | 14:00 | Čas, kedy sa automaticky sťahujú údaje z OKTE API |
+| **Data Failover mode** | Priemery podľa dní v týždni | V prípade nedostupnosti zdroja údajov OKTE doplní údaje v senzoroch cenovými priemermi |
+| **Počet týždňov započítaných do priemerov** | 4 | počet týždňov za ktoré sa počítajú cenové priemery (platné len pre Data Failover mode = "Priemery podľa dní v týždni") |
+| **Počet dní započítaných do priemerov** | 7 | počet dní za ktoré sa počítajú cenové priemery (platné len pre Data Failover mode = "Priemery zo všetkých dní") |
+| **Jednota cenových senzorov** | EUR/MWh |  |
+
+**Data Failover mode - možnosti:**
+  - **Priemery podľa dní v týždni** - vypocitava priemery za jednotlivé periódy pre každý kalendárny deň v týždni a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
+  - **Priemery zo všetkých dní** - vypocitava priemery za jednotlivé periódy zo všetkých dní a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
+  - **Disabled** - funkcia Dat Failover je vypnutá, ak je nedostupný zdroj dát OKTE a sensory majú neaktuálne, alebo neplatné údaje, údaje v sensoroch zostanú neplatné.
+
+> ⚠️ **Ako funguje data failover:**
+Ak sa preruší spojenie so zdrojom dát OKTE a dáta sa v senzoroch stanú plynutím času neaktuálne, do senzorov sa automaticky načítajú cenové priemery vypočítané pre každú periódu.
+Príklad: ak sa preruší spojenie so zdrojom OKTE pri dnešnom sťahovaní, process sťahovania sa niekoľkokrát opakuje. Ak sa spojenie so zdrojom dát neobnoví do polnoci, o pol noci sa údaje z nasledujúceho dňa presunú do aktuáleneho dňa. Ale ak zdroj údajov zostane nedostupný aj v ďalšom cykle, alebo o pol noci, do sensorov sa automaticky načítajú cenové priemery vypočítane z predchádzajúcich údajov. Takto sa zabezpečí, že nezlyhajú automatizácie a procesy zvislé od týchto údajov. Po obnovení spojenia s dátovým zdrojom sa údaje do senzorov automaticky načítajú z dátového zdroja.
 
 > ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje nasledujúceho dňa sa o pol noci automaticky presunú do aktuálneho dňa, preto nie je potrebné po pol noci údaje znovu sťahovať. Údaje nasledujúceho dňa sa doplnia až pri ďalšom sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code. Údaje zostávajú v systéme zapamätané aj po reštarte HA.
 
@@ -163,6 +178,9 @@ Master zariadenie vytvára nasledujúce entity:
 | `sensor.okte_average_price_tomorrow` | Priemerná cena zajtra | EUR/MWh | - |
 | `sensor.okte_min_price_tomorrow` | Minimálna cena zajtra | EUR/MWh | `time_from`, `time_to` |
 | `sensor.okte_max_price_tomorrow` | Maximálna cena zajtra | EUR/MWh | `time_from`, `time_to` |
+| `sensor.okte_failover_data` | Failover údaje cenových priemerov | EUR/MWh | `Failover data today`, `Failover data tomorrowo`, `Period data Monday` .... `Period data Sunday` |
+
+> ⚠️ **INFO:** ak je sensor.okte_failover_data = `false`, tak cenové sensory obsahujú reálne údaje načítané z dátového zdroja OKTE, aj je `true`, tak sensory obsahujú cenové priemery
 
 #### 📈 Senzory údajov pre grafy
 
@@ -203,6 +221,7 @@ Master zariadenie vytvára nasledujúce entity:
 | ID entity | Popis | Akcia |
 |-----------|-------|-------|
 | `button.okte_update_data` | Manuálne stiahnutie údajov | Spustí okamžité stiahnutie údajov z API |
+| `button.okte_reset_failover_history` | Manuálny reset cenových priemerov pre Failover | Vyresetuje všetky cenové priemery pre Failover a vypočíta inicializačné údaje z údajov z posledných dvoch týždňov |
 
 ### Príklad karty pre Master zariadenie
 
