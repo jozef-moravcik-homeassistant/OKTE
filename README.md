@@ -24,7 +24,7 @@
 - 🔢 **Statistical sensors** (min, max, average prices)
 - 🌓 **Sunrise/sunset integration** for time window configuration
 - 🔧 **Multiple Calculator devices** for independent automation scenarios
-- 🔀 **failover function** In the case of data source failure, averaged prices based on periods and timeframes are used
+- 🔀 **Failover function** In the case of data source failure, averaged prices based on periods and timeframes are used
 
 ---
 
