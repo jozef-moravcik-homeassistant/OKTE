@@ -423,47 +423,6 @@ column_span: 2
 
 ---
 
-## 💾 Optimalizácia databázy
-
-OKTE integrácia obsahuje senzory s **veľkým objemom údajov** (HTML tabuľky, polia cien), ktoré môžu výrazne zväčšiť vašu Home Assistant databázu. Tieto entity sú plne funkčné a viditeľné v UI, ale mali by byť **vylúčené z recordera**, aby sa zabránilo problémom s výkonom databázy.
-
-### Odporúčané vylúčenia
-
-Pridajte nasledujúcu konfiguráciu do vášho `configuration.yaml`:
-
-```yaml
-recorder:
-  exclude:
-    entities:
-      - sensor.okte_prices_today
-      - sensor.okte_prices_tomorrow
-      - sensor.okte_html_table_today
-      - sensor.okte_html_table_tomorrow
-```
-
-> ⚠️ **Po pridaní tejto konfigurácie reštartujte Home Assistant, aby sa zmeny aplikovali.**
-
-### Prečo vylúčiť tieto entity?
-
-| Entita | Veľkosť údajov | Dôvod |
-|--------|----------------|-------|
-| `sensor.okte_prices_today` | ~64 KB | Obsahuje 24-48 hodín detailných cenových údajov |
-| `sensor.okte_prices_tomorrow` | ~64 KB | Obsahuje 24-48 hodín detailných cenových údajov |
-| `sensor.okte_html_table_today` | ~32 KB | Kompletná HTML tabuľka so štýlmi |
-| `sensor.okte_html_table_tomorrow` | ~32 KB | Kompletná HTML tabuľka so štýlmi |
-
-### Upozornenie na konfiguráciu
-
-Po inštalácii integrácia zobrazí **systémové upozornenie** odporúčajúce tieto vylúčenia:
-
-![Upozornenie na vylúčenie Recorder](docs/images/sk_recorder_exclude_entities.jpg)
-
-![Nastavenia vylúčenia Recorder](docs/images/sk_settings_recorder_exclude_entities.jpg)
-
-> 💡 **Poznámka:** Tieto entity budú stále fungovať vo vašich dashboardoch a automatizáciách - jednoducho sa len nebudú ukladať do historických databázových záznamov.
-
----
-
 ## 📈 Cenové grafy
 
 OKTE integrácia poskytuje cenové údaje dokonale formátované pre vizualizáciu pomocou **ApexCharts Card**. To vám umožňuje vytvoriť krásne, interaktívne cenové grafy.
