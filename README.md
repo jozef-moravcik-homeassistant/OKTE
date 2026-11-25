@@ -41,12 +41,11 @@
    - [Calculator Device Configuration](#calculator-device-configuration)
    - [Calculator Device Entities](#calculator-device-entities)
    - [Entity ID Prefixes](#entity-id-prefixes)
-4. [Database Optimization](#-database-optimization)
-5. [Price Charts](#-price-charts)
-6. [HTML Price Tables](#-html-price-tables)
-7. [Automation Examples](#-automation-examples)
-8. [Troubleshooting](#-troubleshooting)
-9. [Support](#-support)
+4. [Price Charts](#-price-charts)
+5. [HTML Price Tables](#-html-price-tables)
+6. [Automation Examples](#-automation-examples)
+7. [Troubleshooting](#-troubleshooting)
+8. [Support](#-support)
 
 ---
 
