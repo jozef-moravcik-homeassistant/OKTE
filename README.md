@@ -100,8 +100,6 @@ The OKTE integration uses **two types of virtual devices**:
 - Uses data from OKTE Master to find optimal price windows
 - Perfect for different automation scenarios (battery charging, heat pump operation, etc.)
 
-![Calculator Configuration](docs/images/en_device_okte_calculator_configuration.jpg)
-
 #### Adding Devices
 
 1. Go to **Settings** → **Devices & Services**
