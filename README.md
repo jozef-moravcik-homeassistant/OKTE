@@ -419,47 +419,6 @@ column_span: 2
 
 ---
 
-## 💾 Database Optimization
-
-The OKTE integration includes sensors with **large data volumes** (HTML tables, price arrays) that can significantly increase your Home Assistant database size. These entities are fully functional and visible in the UI but should be **excluded from the recorder** to prevent database performance issues.
-
-### Recommended Exclusions
-
-Add the following configuration to your `configuration.yaml`:
-
-```yaml
-recorder:
-  exclude:
-    entities:
-      - sensor.okte_prices_today
-      - sensor.okte_prices_tomorrow
-      - sensor.okte_html_table_today
-      - sensor.okte_html_table_tomorrow
-```
-
-> ⚠️ **After adding this configuration, restart Home Assistant to apply the changes.**
-
-### Why Exclude These Entities?
-
-| Entity | Data Size | Reason |
-|--------|-----------|--------|
-| `sensor.okte_prices_today` | ~64 KB | Contains 24-48 hours of detailed price data |
-| `sensor.okte_prices_tomorrow` | ~64 KB | Contains 24-48 hours of detailed price data |
-| `sensor.okte_html_table_today` | ~32 KB | Full HTML table with styling |
-| `sensor.okte_html_table_tomorrow` | ~32 KB | Full HTML table with styling |
-
-### Configuration Warning
-
-After installation, the integration will display a **system notification** recommending these exclusions:
-
-![Recorder Exclude Warning](docs/images/en_recorder_exclude_entities.jpg)
-
-![Settings Recorder Exclude](docs/images/en_settings_recorder_exclude_entities.jpg)
-
-> 💡 **Note:** These entities will still work in your dashboards and automations - they just won't be stored in historical database records.
-
----
-
 ## 📈 Price Charts
 
 The OKTE integration provides price data perfectly formatted for **ApexCharts Card** visualization. This allows you to create beautiful, interactive price charts.
