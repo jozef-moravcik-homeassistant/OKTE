@@ -77,6 +77,9 @@ async def async_setup_entry(
 
 class OkteTimeEntity(TimeEntity):
     """Time entity for time range settings (HH:MM format)."""
+
+    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
+    _attr_has_entity_name = False
     
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str, translations: dict | None = None):
         """Initialize the time entity."""

@@ -198,6 +198,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         platforms_forwarded = True
+        _async_disable_registry_entity_name_prefix(hass, entry)
 
         entry.async_on_unload(entry.add_update_listener(update_listener))
         _setup_device_rename_listener(hass, entry, device_type)
@@ -258,6 +259,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise
 
     return True
+
+
+@callback
+def _async_disable_registry_entity_name_prefix(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Entity names are built completely by the entities - Home Assistant must not prepend the device name to them."""
+    entity_registry = er.async_get(hass)
+    for entity_entry in er.async_entries_for_config_entry(entity_registry, entry.entry_id):
+        if entity_entry.has_entity_name:
+            entity_registry.async_update_entity(entity_entry.entity_id, has_entity_name=False)
 
 
 def _setup_device_rename_listener(hass: HomeAssistant, entry: ConfigEntry, device_type: str) -> None:

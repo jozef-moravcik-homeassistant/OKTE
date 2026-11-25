@@ -214,6 +214,9 @@ async def async_setup_entry(
 class SensorEntityDefinition(SensorEntity):
     """OKTE sensor - value and attributes come from the device instance."""
 
+    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
+    _attr_has_entity_name = False
+
     def __init__(
         self,
         hass: HomeAssistant,
