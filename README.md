@@ -150,11 +150,12 @@ The **Master** device is the core component that handles all communication with 
   - **Averages from all days** - It calculates averages for individual periods from all days and uses them if the OKTE data source is unavailable and data in sensors is outdated or invalid.
   - **Disabled** – the Data Failover function is disabled; if the OKTE data source is unavailable and the sensors contain outdated or invalid data, the data in the sensors will remain invalid.
 
-> ⚠️ **How data failover works:**
-If the connection to the OKTE data source is interrupted and the data in the sensors becomes outdated over time, price averages calculated for each period are automatically loaded into the sensors.
-Example: If the connection to the OKTE source is lost during today's data retrieval, the retrieval process is retried several times. If the connection is not restored by midnight, the data for the following day is shifted to the current day at midnight. However, if the data source remains unavailable during the next cycle—or at midnight—price averages calculated from previous data are automatically loaded into the sensors. This ensures that automations and processes dependent on this data do not fail. Once the connection to the data source is restored, the data is automatically loaded into the sensors from that source.
-
-> ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. At midnight, data for the following day is automatically moved to the current day, therefore, there is no need to download the data after midnight. Data for the following day will be added during the next scheduled download (default: 14:00). If a download fails—for example, due to an interrupted internet connection or an issue on the OKTE side—the integration will attempt to download the data every minute until it succeeds. This status is indicated by the `sensor.okte_connection_status` sensor, and any error code is recorded in the `sensor.okte_error_code` sensor. The data remains stored in the system even after an HA restart.
+> ⚠️ **Important:**
+>   - **OKTE publishes next-day prices around 13:00**, so the default fetch time of 14:00 (configurable) provides up-to-date data for both today and tomorrow.
+>   - **Midnight:** data for the following day is automatically moved to the current day, so no download is needed after midnight; the next day's data is added at the next scheduled download.
+>   - **Failed download** (e.g., an interrupted internet connection or an issue on the OKTE side): the integration retries every minute until it succeeds; the status is shown in `sensor.okte_connection_status` and any error code in `sensor.okte_error_code`.
+>   - **Storage:** the data is kept in HA storage, so it remains available after an HA restart.
+>   - **Failover:** if the connection to OKTE is not restored and the data in the sensors becomes outdated (e.g., the data for the following day has been moved to the current day at midnight and the next download also fails), price averages calculated for each period from previous data are automatically loaded into the sensors, so automations and processes depending on this data do not fail. As soon as the connection is restored, the data from OKTE is loaded into the sensors automatically.
 
 ### Master Device Entities
 
