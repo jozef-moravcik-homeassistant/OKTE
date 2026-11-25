@@ -1,6 +1,6 @@
 # 🔌 OKTE - Integrácia slovenského trhu s elektrinou pre Home Assistant
 
-[![Verzia](https://img.shields.io/badge/verzia-1.01.03-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
+[![Verzia](https://img.shields.io/badge/verzia-1.01.04-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![Licencia](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
 
@@ -31,10 +31,11 @@
 ## 📑 Obsah
 
 1. [Inštalácia](#-inštalácia)
-   - [Cez Marketplace](#cez-hacs-odporúčané)
+   - [Cez Marketplace](#cez-marketplace-odporúčané)
    - [Manuálna inštalácia](#manuálna-inštalácia)
    - [Konfigurácia zariadení](#konfigurácia-zariadení)
-2. [Master zariadenie](#-okte-master-zariadenie)
+   - [Názvy entít](#názvy-entít)
+2. [Master zariadenie](#-master-zariadenie)
    - [Konfigurácia Master zariadenia](#konfigurácia-master-zariadenia)
    - [Entity Master zariadenia](#entity-master-zariadenia)
 3. [Calculator zariadenie](#-calculator-zariadenie)
@@ -44,24 +45,25 @@
 4. [Cenové grafy](#-cenové-grafy)
 5. [HTML tabuľky cien](#-html-tabuľky-cien)
 6. [Príklady automatizácií](#-príklady-automatizácií)
-7. [Riešenie problémov](#-riešenie-problémov)
-8. [Podpora](#-podpora)
+7. [Podpora](#-podpora)
 
 ---
 
 ## 🔧 Inštalácia
+
+> ℹ️ **Požiadavky:** Home Assistant **2026.3.0** alebo novší.
 
 ### Cez Marketplace (Odporúčané)
 
 1. Otvorte **Marketplace** vo vašom Home Assistant
 2. Vyhľadajte **okte** a kliknite na tlačítko **Inštalovať**
 #### Ak nemôžete nájsť okte v Marketplace, pokračujte v nasledujúcich krokoch ####
-4. Kliknite na menu **3 bodky** v pravom hornom rohu
-5. Vyberte **Vlastné repozitáre**
-6. Pridajte URL repozitára: `https://github.com/jozef-moravcik-homeassistant/okte`
-7. Kategória: **Integrácia**
-8. Kliknite na **Stiahnuť**
-9. Reštartujte Home Assistant
+3. Kliknite na menu **3 bodky** v pravom hornom rohu
+4. Vyberte **Vlastné repozitáre**
+5. Pridajte URL repozitára: `https://github.com/jozef-moravcik-homeassistant/okte`
+6. Kategória: **Integrácia**
+7. Kliknite na **Stiahnuť**
+8. Reštartujte Home Assistant
 
 ### Manuálna inštalácia
 
@@ -104,13 +106,26 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 1. Prejdite do **Nastavenia** → **Zariadenia a služby**
 2. Kliknite na **+ Pridať integráciu**
 3. Vyhľadajte **"OKTE"**
-4. Vyberte typ zariadenia:
-   - **Master (API Data Fetcher)** - ak je toto vaša prvá inštalácia
-   - **Calculator (Time Window Calculator)** - pre ďalšie calculator zariadenia
+4. Typ zariadenia sa vyberie automaticky:
+   - **Master** - ak Master zariadenie ešte neexistuje (prvá inštalácia); zobrazí sa konfiguračný formulár Master zariadenia
+   - **Calculator** - ak Master zariadenie už existuje; Calculator sa vytvorí hneď, bez konfiguračného formulára
 
 ![Karty integrácie](docs/images/sk_integration_card_01.jpg)
 
 ![Aktualizácia zariadenia](docs/images/sk_device_update.jpg)
+
+### Názvy entít
+
+Home Assistant vždy zobrazuje pred názvom entity názov zariadenia: `<názov zariadenia> <názov entity>`.
+
+| Zariadenie | Názov zariadenia | Príklad názvu entity |
+|------------|------------------|----------------------|
+| Master | `OKTE` | `OKTE Current Price` |
+| Calculator | `Calculator 1` alebo názov nastavený v UI (napr. `Battery`) | `Battery Detector Lowest Price` |
+
+- Master zariadenie sa volá **OKTE**; názov jeho záznamu na stránke integrácie je **Master**.
+- Každé zariadenie je možné premenovať v UI (**Nastavenia** → **Zariadenia a služby** → **OKTE** → zariadenie → premenovať). Názvy entít sa automaticky prispôsobia novému názvu zariadenia.
+- ID entít nezávisia od názvu zariadenia (napr. `sensor.okte_current_price`, `binary_sensor.okte_1_detector_lowest_price`), takže automatizácie a dashboardy fungujú aj po premenovaní.
 
 ## 📡 'Master' zariadenie
 
@@ -124,23 +139,22 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 
 | Parameter | Predvolená hodnota | Popis |
 |-----------|-------------------|-------|
-| **Pridať prefix 'OKTE -' k názvom entít** | ✅ Zapnuté | Pridá prefix "okte_" ku všetkým ID entít |
 | **Denný čas sťahovania** | 14:00 | Čas, kedy sa automaticky sťahujú údaje z OKTE API |
 | **Data Failover mode** | Priemery podľa dní v týždni | V prípade nedostupnosti zdroja údajov OKTE doplní údaje v senzoroch cenovými priemermi |
 | **Počet týždňov započítaných do priemerov** | 4 | počet týždňov za ktoré sa počítajú cenové priemery (platné len pre Data Failover mode = "Priemery podľa dní v týždni") |
 | **Počet dní započítaných do priemerov** | 7 | počet dní za ktoré sa počítajú cenové priemery (platné len pre Data Failover mode = "Priemery zo všetkých dní") |
-| **Jednota cenových senzorov** | EUR/MWh |  |
+| **Jednotka cenových senzorov** | EUR/MWh |  |
 
 **Data Failover mode - možnosti:**
-  - **Priemery podľa dní v týždni** - vypocitava priemery za jednotlivé periódy pre každý kalendárny deň v týždni a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
-  - **Priemery zo všetkých dní** - vypocitava priemery za jednotlivé periódy zo všetkých dní a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
-  - **Disabled** - funkcia Dat Failover je vypnutá, ak je nedostupný zdroj dát OKTE a sensory majú neaktuálne, alebo neplatné údaje, údaje v sensoroch zostanú neplatné.
+  - **Priemery podľa dní v týždni** - vypočítava priemery za jednotlivé periódy pre každý kalendárny deň v týždni a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
+  - **Priemery zo všetkých dní** - vypočítava priemery za jednotlivé periódy zo všetkých dní a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
+  - **Disabled** - funkcia Data Failover je vypnutá, ak je nedostupný zdroj dát OKTE a sensory majú neaktuálne, alebo neplatné údaje, údaje v sensoroch zostanú neplatné.
 
 > ⚠️ **Ako funguje data failover:**
 Ak sa preruší spojenie so zdrojom dát OKTE a dáta sa v senzoroch stanú plynutím času neaktuálne, do senzorov sa automaticky načítajú cenové priemery vypočítané pre každú periódu.
-Príklad: ak sa preruší spojenie so zdrojom OKTE pri dnešnom sťahovaní, process sťahovania sa niekoľkokrát opakuje. Ak sa spojenie so zdrojom dát neobnoví do polnoci, o pol noci sa údaje z nasledujúceho dňa presunú do aktuáleneho dňa. Ale ak zdroj údajov zostane nedostupný aj v ďalšom cykle, alebo o pol noci, do sensorov sa automaticky načítajú cenové priemery vypočítane z predchádzajúcich údajov. Takto sa zabezpečí, že nezlyhajú automatizácie a procesy zvislé od týchto údajov. Po obnovení spojenia s dátovým zdrojom sa údaje do senzorov automaticky načítajú z dátového zdroja.
+Príklad: ak sa preruší spojenie so zdrojom OKTE pri dnešnom sťahovaní, proces sťahovania sa niekoľkokrát opakuje. Ak sa spojenie so zdrojom dát neobnoví do polnoci, o pol noci sa údaje z nasledujúceho dňa presunú do aktuálneho dňa. Ale ak zdroj údajov zostane nedostupný aj v ďalšom cykle, alebo o pol noci, do sensorov sa automaticky načítajú cenové priemery vypočítané z predchádzajúcich údajov. Takto sa zabezpečí, že nezlyhajú automatizácie a procesy závislé od týchto údajov. Po obnovení spojenia s dátovým zdrojom sa údaje do senzorov automaticky načítajú z dátového zdroja.
 
-> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje nasledujúceho dňa sa o pol noci automaticky presunú do aktuálneho dňa, preto nie je potrebné po pol noci údaje znovu sťahovať. Údaje nasledujúceho dňa sa doplnia až pri ďalšom sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa intergácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code. Údaje zostávajú v systéme zapamätané aj po reštarte HA.
+> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje nasledujúceho dňa sa o pol noci automaticky presunú do aktuálneho dňa, preto nie je potrebné po pol noci údaje znovu sťahovať. Údaje nasledujúceho dňa sa doplnia až pri ďalšom sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa integrácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code. Údaje zostávajú v systéme zapamätané aj po reštarte HA.
 
 ### Entity Master zariadenia
 
@@ -154,14 +168,14 @@ Master zariadenie vytvára nasledujúce entity:
 |-----------|-------|----------|-----------|
 | `sensor.okte_current_price` | Aktuálna cena elektriny | EUR/MWh | - |
 | `sensor.okte_average_price_today` | Priemerná cena dnes | EUR/MWh | - |
-| `sensor.okte_min_price_today` | Minimálna cena dnes | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_max_price_today` | Maximálna cena dnes | EUR/MWh | `time_from`, `time_to` |
+| `sensor.okte_min_price_today` | Minimálna cena dnes | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_max_price_today` | Maximálna cena dnes | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
 | `sensor.okte_average_price_tomorrow` | Priemerná cena zajtra | EUR/MWh | - |
-| `sensor.okte_min_price_tomorrow` | Minimálna cena zajtra | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_max_price_tomorrow` | Maximálna cena zajtra | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_failover_data` | Failover údaje cenových priemerov | EUR/MWh | `Failover data today`, `Failover data tomorrowo`, `Period data Monday` .... `Period data Sunday` |
+| `sensor.okte_min_price_tomorrow` | Minimálna cena zajtra | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_max_price_tomorrow` | Maximálna cena zajtra | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_failover_data` | Vypočítané priemery (`true`) alebo reálne údaje (`false`) v cenových senzoroch | - | `failover_data_today`, `failover_data_tomorrow`, `Period data Monday` … `Period data Sunday` |
 
-> ⚠️ **INFO:** ak je sensor.okte_failover_data = `false`, tak cenové sensory obsahujú reálne údaje načítané z dátového zdroja OKTE, aj je `true`, tak sensory obsahujú cenové priemery
+> ⚠️ **INFO:** ak je sensor.okte_failover_data = `false`, tak cenové sensory obsahujú reálne údaje načítané z dátového zdroja OKTE, ak je `true`, tak sensory obsahujú cenové priemery
 
 #### 📈 Senzory údajov pre grafy
 
@@ -193,16 +207,17 @@ Master zariadenie vytvára nasledujúce entity:
 
 | ID entity | Popis | Hodnoty |
 |-----------|-------|---------|
-| `sensor.okte_connection_status` | Stav API pripojenia | `Pripojené` / `Odpojené` |
+| `sensor.okte_connection_status` | Stav API pripojenia | `True` / `False` (atribút `status`: `Connected` / `Disconnected`, atribút `status_description`) |
 | `sensor.okte_last_update` | Posledné úspešné stiahnutie údajov | Časová pečiatka |
 | `sensor.okte_data_count` | Počet cenových záznamov | Celé číslo |
+| `sensor.okte_error_code` | Chybový kód | `0` = OK, `1` = sťahovanie údajov zlyhalo, `2` = žiadne platné údaje pre dnešok, `3` = oboje |
 
 #### 🔘 Ovládacie tlačidlá
 
 | ID entity | Popis | Akcia |
 |-----------|-------|-------|
 | `button.okte_update_data` | Manuálne stiahnutie údajov | Spustí okamžité stiahnutie údajov z API |
-| `button.okte_reset_failover_history` | Manuálny reset cenových priemerov pre Failover | Vyresetuje všetky cenové priemery pre Failover a vypočíta inicializačné údaje z údajov z posledných dvoch týždňov |
+| `button.okte_reset_failover_history` | Manuálny reset cenových priemerov pre Failover | Vyresetuje všetky cenové priemery pre Failover a znovu ich vypočíta zo štatistík recordera senzora `sensor.okte_current_price` (posledných 10 dní) a z reálnych cien už stiahnutých z OKTE |
 
 ### Príklad karty pre Master zariadenie
 
@@ -237,7 +252,7 @@ cards:
       - type: divider
       - entity: button.okte_update_data
       - entity: button.okte_reset_failover_history
-    title: OKTE Master
+    title: OKTE
     grid_options:
       columns: full
 column_span: 2
@@ -247,17 +262,11 @@ column_span: 2
 
 ## 🔢 Calculator zariadenie
 
-**Calculator** zariadenie využíva údaje z Master na vyhľadanie optimálnych časových okien s najnižšími alebo najvyššími cenami elektriny. Môžete pridať **neomedzený počet** Calculator zariadení, každé s nezávislou konfiguráciou pre rôzne automatizačné scenáre.
+**Calculator** zariadenie využíva údaje z Master na vyhľadanie optimálnych časových okien s najnižšími alebo najvyššími cenami elektriny. Môžete pridať **neobmedzený počet** Calculator zariadení, každé s nezávislou konfiguráciou pre rôzne automatizačné scenáre.
 
 ### Konfigurácia Calculator zariadenia
 
-![Nastavenia Calculator zariadenia](docs/images/sk_device_okte_calculator_configuration.jpg)
-
-#### Parametre konfigurácie
-
-| Parameter | Predvolená hodnota | Popis |
-|-----------|-------------------|-------|
-| **Vložiť názov zariadenia pred názov entity** | ✅ Zapnuté | Pridá identifikátor zariadenia do názvov entít |
+Calculator zariadenie **nemá žiadne konfiguračné parametre**. Vytvorí sa hneď po pridaní a jeho správanie sa nastavuje pomocou jeho entít (časové rozsahy, veľkosti okien, prepínače východu/západu slnka), ktoré sú popísané nižšie.
 
 ### Entity Calculator zariadenia
 
@@ -283,9 +292,9 @@ Calculator zariadenia používajú **číslované prefixy** v ID entít:
 
 | Vzor ID entity | Popis | Atribúty |
 |----------------|-------|-----------|
-| `sensor.okte_N_lowest_price_window` | Kombinované okno najnižšej ceny (dnes alebo zajtra) | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_lowest_price_window_today` | Okno najnižšej ceny dnes | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_lowest_price_window_tomorrow` | Okno najnižšej ceny zajtra | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
+| `sensor.okte_N_lowest_price_window` | Kombinované okno najnižšej ceny (dnes alebo zajtra) | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
+| `sensor.okte_N_lowest_price_window_today` | Okno najnižšej ceny dnes | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
+| `sensor.okte_N_lowest_price_window_tomorrow` | Okno najnižšej ceny zajtra | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
 | `sensor.okte_N_lowest_price_window_size` | Trvanie okna vo formáte H:MM | - |
 | `sensor.okte_N_lowest_price_search_window_size` | Trvanie vyhľadávacieho okna vo formáte H:MM | - |
 
@@ -293,11 +302,25 @@ Calculator zariadenia používajú **číslované prefixy** v ID entít:
 
 | Vzor ID entity | Popis | Atribúty |
 |----------------|-------|-----------|
-| `sensor.okte_N_highest_price_window` | Kombinované okno najvyššej ceny (dnes alebo zajtra) | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_highest_price_window_today` | Okno najvyššej ceny dnes | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_highest_price_window_tomorrow` | Okno najvyššej ceny zajtra | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
+| `sensor.okte_N_highest_price_window` | Kombinované okno najvyššej ceny (dnes alebo zajtra) | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
+| `sensor.okte_N_highest_price_window_today` | Okno najvyššej ceny dnes | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
+| `sensor.okte_N_highest_price_window_tomorrow` | Okno najvyššej ceny zajtra | pozri [Atribúty senzorov okien](#atribúty-senzorov-okien) |
 | `sensor.okte_N_highest_price_window_size` | Trvanie okna vo formáte H:MM | - |
 | `sensor.okte_N_highest_price_search_window_size` | Trvanie vyhľadávacieho okna vo formáte H:MM | - |
+
+#### Atribúty senzorov okien
+
+Stav senzorov okien je `OK`, ak bolo okno nájdené, inak `NOT`.
+
+| Atribút | Popis |
+|---------|-------|
+| `found` | `true`, ak bolo okno nájdené |
+| `start_time_local`, `end_time_local` | Začiatok a koniec okna v miestnom čase (`DD.MM.RRRR HH:MM`) |
+| `start_time_UTC`, `end_time_UTC` | Začiatok a koniec okna v UTC |
+| `periods` | Počet 15-minútových periód okna |
+| `window_size`, `window_search_size` | Veľkosť okna a vyhľadávacieho okna |
+| `min_price`, `max_price`, `avg_price` | Minimálna, maximálna a priemerná cena v okne (EUR/MWh) |
+| `records` | Zoznam periód okna s ich cenami |
 
 #### 🎯 Binárne senzory - detektory
 
@@ -308,14 +331,12 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_lowest_price` | ON keď je v okne najnižšej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_lowest_price_today` | ON keď je v dnešnom okne najnižšej ceny | ON / OFF |
-| `binary_sensor.okte_N_detector_lowest_price_tomorrow` | ON keď je v zajtrajšom okne najnižšej ceny | ON / OFF |
 
 **Detektory najvyššej ceny:**
 | Vzor ID entity | Popis | Stavy |
 |----------------|-------|-------|
 | `binary_sensor.okte_N_detector_highest_price` | ON keď je v okne najvyššej ceny (kombinované) | ON / OFF |
 | `binary_sensor.okte_N_detector_highest_price_today` | ON keď je v dnešnom okne najvyššej ceny | ON / OFF |
-| `binary_sensor.okte_N_detector_highest_price_tomorrow` | ON keď je v zajtrajšom okne najvyššej ceny | ON / OFF |
 
 > 💡 **Použitie:** Ideálne pre spúšťače automatizácií! Zapnite nabíjanie batérie keď je detektor ON, alebo znížte spotrebu počas období vysokých cien.
 
@@ -330,13 +351,13 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 | `switch.okte_N_lowest_price_window_to_as_day_end` | Switch | Automaticky nastaviť koncový čas na západ slnka | OFF |
 | `time.okte_N_lowest_price_window_to_as_day_end_prefix` | Time | Skrátenie konca vyhľadávacieho okna pred západom slnka | 00:00 |
 | `time.okte_N_lowest_price_time_to` | Time | Koniec vyhľadávacieho okna | 23:59 |
-| `number.okte_N_lowest_price_window_size` | Number | Trvanie cenového okna (hodiny) | 3 |
+| `number.okte_N_lowest_price_window_size` | Number | Veľkosť cenového okna v 15-minútových periódach (1–96) | 3 (= 45 min) |
 
 **Ako fungujú prepínače východu/západu slnka:**
 - ✅ **ON**: Čas je automaticky nastavený na východ/západ slnka
-- ak je nastavené oneskorenie po východe slnka (napríklad 2:00), tak čas východu slnka (napríklad 6:30) sa pripočíta k tomuto času, výsledkom bude, že vyhľadávacie okno za začína neskór (v našom príklade až o 8:30).
+- ak je nastavené oneskorenie po východe slnka (napríklad 2:00), tak čas východu slnka (napríklad 6:30) sa pripočíta k tomuto času, výsledkom bude, že vyhľadávacie okno sa začína neskôr (v našom príklade až o 8:30).
 - ak je nastavený čas skrátenia vyhľadávacieho okna pred západom slnka (napríklad 2:00), a západ slnka je napríklad o 17:30, tak koniec vyhľadávacieho okna bude o 15:30.
-- oneskorenie začiatku a skrátenie konca vyhľadávacieho okna je praktické hlavne pre plánovanie prevádzky veľkých spotrebičov, ako napríklad tepeľné čerpadlo, lebo po východe slnka je potrebný nejaký čas, až výkon z FV bude dostatočný pre prevádzku tepeľného čerpadla.
+- oneskorenie začiatku a skrátenie konca vyhľadávacieho okna je praktické hlavne pre plánovanie prevádzky veľkých spotrebičov, ako napríklad tepelné čerpadlo, lebo po východe slnka je potrebný nejaký čas, až výkon z FV bude dostatočný pre prevádzku tepelného čerpadla.
    
 - ⬜ **OFF**: Čas začiatku a konca vyhľadávacieho okna sa zadáva manuálne
 
@@ -351,7 +372,7 @@ Tieto detektory sa automaticky zapnú **ON**, keď je aktuálny čas v rámci vy
 | `switch.okte_N_highest_price_window_to_as_day_end` | Switch | Automaticky nastaviť koncový čas na západ slnka | OFF |
 | `time.okte_N_highest_price_window_to_as_day_end_prefix` | Time | Skrátenie konca vyhľadávacieho okna pred západom slnka | 00:00 |
 | `time.okte_N_highest_price_time_to` | Time | Manuálny koncový čas | 23:59 |
-| `number.okte_N_highest_price_window_size` | Number | Trvanie cenového okna (hodiny) | 3 |
+| `number.okte_N_highest_price_window_size` | Number | Veľkosť cenového okna v 15-minútových periódach (1–96) | 3 (= 45 min) |
 
 ### Príklad karty pre Calculator zariadenie
 
@@ -745,34 +766,34 @@ Automaticky nabíjajte batériu, keď sú ceny elektriny najnižšie:
 automation:
   - alias: "Batéria - Nabíjanie počas okna najnižšej ceny"
     description: "Nabíjať batériu keď je v okne najnižšej ceny"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_1_detector_lowest_price
         to: "on"
-    condition:
+    conditions:
       - condition: numeric_state
         entity_id: sensor.battery_level
         below: 80
-    action:
-      - service: switch.turn_on
+    actions:
+      - action: switch.turn_on
         target:
           entity_id: switch.battery_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "⚡ Nabíjanie batérie spustené"
           message: "Nabíjanie počas obdobia nízkych cien ({{ states('sensor.okte_current_price') }} €/MWh)"
   
   - alias: "Batéria - Zastavenie nabíjania po okne najnižšej ceny"
     description: "Zastaviť nabíjanie keď skončí okno najnižšej ceny"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_1_detector_lowest_price
         to: "off"
-    action:
-      - service: switch.turn_off
+    actions:
+      - action: switch.turn_off
         target:
           entity_id: switch.battery_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "🔋 Nabíjanie batérie zastavené"
           message: "Obdobie nízkych cien skončilo"
@@ -786,21 +807,21 @@ Optimalizujte prevádzku tepelného čerpadla na základe cien elektriny:
 automation:
   - alias: "Tepelné čerpadlo - Posilnenie počas nízkych cien"
     description: "Zvýšiť výkon tepelného čerpadla počas okna najnižšej ceny"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_2_detector_lowest_price
         to: "on"
-    condition:
+    conditions:
       - condition: numeric_state
         entity_id: sensor.outdoor_temperature
         below: 5
-    action:
-      - service: climate.set_temperature
+    actions:
+      - action: climate.set_temperature
         target:
           entity_id: climate.heat_pump
         data:
           temperature: 23
-      - service: number.set_value
+      - action: number.set_value
         target:
           entity_id: number.heat_pump_power_limit
         data:
@@ -815,18 +836,18 @@ Znížte spotrebu energie počas najdrahších období:
 automation:
   - alias: "Energia - Zníženie spotreby počas vysokých cien"
     description: "Vypnúť nevyhnutné zariadenia počas okna najvyššej ceny"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_3_detector_highest_price
         to: "on"
-    action:
-      - service: switch.turn_off
+    actions:
+      - action: switch.turn_off
         target:
           entity_id:
             - switch.electric_water_heater
             - switch.pool_pump
             - switch.ev_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "⚠️ Obdobie vysokých cien"
           message: "Nevyhnutné zariadenia vypnuté ({{ states('sensor.okte_current_price') }} €/MWh)"
@@ -840,29 +861,29 @@ Automaticky upravte veľkosť cenového okna na základe úrovne batérie:
 automation:
   - alias: "Batéria - Úprava veľkosti nabíjacieho okna"
     description: "Zvýšiť nabíjacie okno keď je batéria veľmi nízka"
-    trigger:
-      - platform: numeric_state
+    triggers:
+      - trigger: numeric_state
         entity_id: sensor.battery_level
         below: 20
-    action:
-      - service: number.set_value
+    actions:
+      - action: number.set_value
         target:
           entity_id: number.okte_1_lowest_price_window_size
         data:
-          value: 6
+          value: 24  # 24 periód = 6 hodín
   
   - alias: "Batéria - Normálna veľkosť nabíjacieho okna"
     description: "Použiť normálnu veľkosť okna keď je batéria OK"
-    trigger:
-      - platform: numeric_state
+    triggers:
+      - trigger: numeric_state
         entity_id: sensor.battery_level
         above: 50
-    action:
-      - service: number.set_value
+    actions:
+      - action: number.set_value
         target:
           entity_id: number.okte_1_lowest_price_window_size
         data:
-          value: 3
+          value: 12  # 12 periód = 3 hodiny
 ```
 
 ### Príklad 5: Upozornenie na ceny
@@ -873,18 +894,18 @@ Dostávajte upozornenia o zajtrajšom okne najnižšej ceny:
 automation:
   - alias: "OKTE - Upozornenie na zajtra najnižšiu cenu"
     description: "Poslať upozornenie s zajtrajším najlacnejším časom"
-    trigger:
-      - platform: time
+    triggers:
+      - trigger: time
         at: "14:30:00"
-    action:
-      - service: notify.mobile_app
+    actions:
+      - action: notify.mobile_app
         data:
           title: "⚡ Zajtrajšie okno najnižšej ceny"
           message: >
             Najnižšie ceny zajtra:
-            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'start_time') }} - 
-            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'end_time') }}
-            Priemer: {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'average_price') }} €/MWh
+            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'start_time_local') }} - 
+            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'end_time_local') }}
+            Priemer: {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'avg_price') }} €/MWh
 ```
 
 ### Tipy pre automatizácie
@@ -892,7 +913,7 @@ automation:
 💡 **Najlepšie postupy:**
 
 1. **Použite viacero Calculator zariadení** pre rôzne spotrebiče (batéria, tepelné čerpadlo, ohrievač vody)
-2. **Upravte veľkosti okien** podľa vašich potrieb (3h pre batériu, 6h pre tepelné čerpadlo)
+2. **Upravte veľkosti okien** podľa vašich potrieb (veľkosť okna v 15-minútových periódach, napr. 12 periód = 3 h pre batériu, 24 periód = 6 h pre tepelné čerpadlo)
 3. **Kombinujte cenové detektory** s ďalšími podmienkami (teplota, úroveň batérie)
 4. **Nastavte prepínače východu/západu slnka** pre prirodzenejšie automatizačné vzory
 5. **Používajte upozornenia** na informovanie o zmenách cien

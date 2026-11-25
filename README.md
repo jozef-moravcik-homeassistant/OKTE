@@ -1,6 +1,6 @@
 # 🔌 OKTE - Slovak Energy Market Integration for Home Assistant
 
-[![Version](https://img.shields.io/badge/version-1.01.03-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
+[![Version](https://img.shields.io/badge/version-1.01.04-blue.svg)](https://github.com/jozef-moravcik-homeassistant/okte)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -31,10 +31,11 @@
 ## 📑 Table of Contents
 
 1. [Installation](#-installation)
-   - [Via Marketplace](#via-hacs-recommended)
+   - [Via Marketplace](#via-marketplace-recommended)
    - [Manual Installation](#manual-installation)
    - [Device Configuration](#device-configuration)
-2. [Master Device](#-okte-master-device)
+   - [Entity Names](#entity-names)
+2. [Master Device](#-master-device)
    - [Master Device Configuration](#master-device-configuration)
    - [Master Device Entities](#master-device-entities)
 3. [Calculator Device](#-calculator-device)
@@ -44,12 +45,13 @@
 4. [Price Charts](#-price-charts)
 5. [HTML Price Tables](#-html-price-tables)
 6. [Automation Examples](#-automation-examples)
-7. [Troubleshooting](#-troubleshooting)
-8. [Support](#-support)
+7. [Support](#-support)
 
 ---
 
 ## 🔧 Installation
+
+> ℹ️ **Requirements:** Home Assistant **2026.3.0** or newer.
 
 ### Via Marketplace (Recommended)
 
@@ -104,13 +106,26 @@ The OKTE integration uses **two types of virtual devices**:
 1. Go to **Settings** → **Devices & Services**
 2. Click **+ Add Integration**
 3. Search for **"OKTE"**
-4. Select device type:
-   - **Master (API Data Fetcher)** - if this is your first installation
-   - **Calculator (Time Window Calculator)** - for additional calculator devices
+4. The device type is selected automatically:
+   - **Master** - if no Master device exists yet (first installation); the configuration form of the Master is shown
+   - **Calculator** - if the Master device already exists; the Calculator is created immediately, without a configuration form
 
 ![Integration Cards](docs/images/en_integration_card_01.jpg)
 
 ![Device Update](docs/images/en_device_update.jpg)
+
+### Entity Names
+
+Home Assistant always shows the device name in front of the entity name: `<device name> <entity name>`.
+
+| Device | Device name | Entity name example |
+|--------|-------------|---------------------|
+| Master | `OKTE` | `OKTE Current Price` |
+| Calculator | `Calculator 1` or the name set in the UI (e.g. `Battery`) | `Battery Detector Lowest Price` |
+
+- The Master device is named **OKTE**; the title of its entry on the integration page is **Master**.
+- Any device can be renamed in the UI (**Settings** → **Devices & Services** → **OKTE** → device → rename). The entity names follow the new device name automatically.
+- Entity IDs do not depend on the device name (e.g. `sensor.okte_current_price`, `binary_sensor.okte_1_detector_lowest_price`), so automations and dashboards keep working after a rename.
 
 ## 📡 'Master' Device
 
@@ -124,11 +139,10 @@ The **Master** device is the core component that handles all communication with 
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| **Add 'OKTE -' prefix to entity names** | ✅ Enabled | Adds "okte_" prefix to all entity IDs |
 | **Daily fetch time** | 14:00 | Time when data is automatically downloaded from OKTE API |
 | **Data Failover mode** | Averages by week days | In case of data source unavailability, OKTE will populate the data in the sensors using price averages. |
-| **Number of weeks included in averages** | 4 | umber of weeks over which price averages are calculated (valid only for Data Failover mode = "Averages by week days") |
-| **Number of days included in averages** | 7 | počet dní za ktoré sa počítajú cenové priemery (valid only for Data Failover mode = "Averages from all days") |
+| **Number of weeks included in averages** | 4 | Number of weeks over which price averages are calculated (valid only for Data Failover mode = "Averages by week days") |
+| **Number of days included in averages** | 7 | Number of days over which price averages are calculated (valid only for Data Failover mode = "Averages from all days") |
 | **Unit of price sensors** | EUR/MWh |  |
 
 **Data Failover mode option:**
@@ -138,7 +152,7 @@ The **Master** device is the core component that handles all communication with 
 
 > ⚠️ **How data failover works:**
 If the connection to the OKTE data source is interrupted and the data in the sensors becomes outdated over time, price averages calculated for each period are automatically loaded into the sensors.
-Example: If the connection to the OKTE source is lost during today's data retrieval, the retrieval process is retried several times. If the connection is not restored by midnight, the data for the following day is shifted to the current day at midnight. However, if the data source remains unavailable during the next cycle—or at midnight—price averages calculated from previous data are automatically loaded into the sensors. This ensures that automations and processes dependent on this data do not fail. Once the connection to the data source is restored, the data is automatically loaded into the sensors from that source.ja.
+Example: If the connection to the OKTE source is lost during today's data retrieval, the retrieval process is retried several times. If the connection is not restored by midnight, the data for the following day is shifted to the current day at midnight. However, if the data source remains unavailable during the next cycle—or at midnight—price averages calculated from previous data are automatically loaded into the sensors. This ensures that automations and processes dependent on this data do not fail. Once the connection to the data source is restored, the data is automatically loaded into the sensors from that source.
 
 > ⚠️ **Important:** OKTE publishes next day prices around **13:00**, so the default fetch time of **14:00** ensures you always have up-to-date data for both days. At midnight, data for the following day is automatically moved to the current day, therefore, there is no need to download the data after midnight. Data for the following day will be added during the next scheduled download (default: 14:00). If a download fails—for example, due to an interrupted internet connection or an issue on the OKTE side—the integration will attempt to download the data every minute until it succeeds. This status is indicated by the `sensor.okte_connection_status` sensor, and any error code is recorded in the `sensor.okte_error_code` sensor. The data remains stored in the system even after an HA restart.
 
@@ -154,12 +168,12 @@ The Master device creates the following entities:
 |-----------|-------------|------|------------|
 | `sensor.okte_current_price` | Current electricity price | EUR/MWh | - |
 | `sensor.okte_average_price_today` | Today's average price | EUR/MWh | - |
-| `sensor.okte_min_price_today` | Today's minimum price | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_max_price_today` | Today's maximum price | EUR/MWh | `time_from`, `time_to` |
+| `sensor.okte_min_price_today` | Today's minimum price | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_max_price_today` | Today's maximum price | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
 | `sensor.okte_average_price_tomorrow` | Tomorrow's average price | EUR/MWh | - |
-| `sensor.okte_min_price_tomorrow` | Tomorrow's minimum price | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_max_price_tomorrow` | Tomorrow's maximum price | EUR/MWh | `time_from`, `time_to` |
-| `sensor.okte_failover_data` | Price Average Data for Failover | EUR/MWh | `Failover data today`, `Failover data tomorrowo`, `Period data Monday` .... `Period data Sunday` |
+| `sensor.okte_min_price_tomorrow` | Tomorrow's minimum price | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_max_price_tomorrow` | Tomorrow's maximum price | EUR/MWh | `time`, `period`, `period_start`, `period_end` |
+| `sensor.okte_failover_data` | Calculated averages (`true`) or real data (`false`) in the price sensors | - | `failover_data_today`, `failover_data_tomorrow`, `Period data Monday` … `Period data Sunday` |
 
 > ⚠️ **INFO:** If `sensor.okte_failover_data` is `false`, the price sensors contain actual data retrieved from the OKTE data source, if it is `true`, the sensors contain price averages.
 
@@ -193,16 +207,17 @@ The Master device creates the following entities:
 
 | Entity ID | Description | Values |
 |-----------|-------------|--------|
-| `sensor.okte_connection_status` | API connection status | `Connected` / `Disconnected` |
+| `sensor.okte_connection_status` | API connection status | `True` / `False` (attribute `status`: `Connected` / `Disconnected`, attribute `status_description`) |
 | `sensor.okte_last_update` | Last successful data fetch | Timestamp |
 | `sensor.okte_data_count` | Number of price records | Integer |
+| `sensor.okte_error_code` | Error code | `0` = OK, `1` = data download failed, `2` = no valid data for today, `3` = both |
 
 #### 🔘 Control Buttons
 
 | Entity ID | Description | Action |
 |-----------|-------------|--------|
 | `button.okte_update_data` | Manual data fetch | Triggers immediate API data download |
-| `button.okte_reset_failover_history` | Manual reset of Failover history | Resets all price averages for failover and calculates initialization data based on data from the last two weeks. |
+| `button.okte_reset_failover_history` | Manual reset of Failover history | Resets all price averages for failover and rebuilds them from the recorder statistics of `sensor.okte_current_price` (last 10 days) and the real prices already downloaded from OKTE. |
 
 ### Example Card for Master Device
 
@@ -237,7 +252,7 @@ cards:
       - type: divider
       - entity: button.okte_update_data
       - entity: button.okte_reset_failover_history
-    title: OKTE Master
+    title: OKTE
     grid_options:
       columns: full
 column_span: 2
@@ -251,13 +266,7 @@ The **Calculator** device uses data from the Master to find optimal time windows
 
 ### Calculator Device Configuration
 
-![Calculator Device Settings](docs/images/en_device_okte_calculator_configuration.jpg)
-
-#### Configuration Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| **Insert device name before entity name** | ✅ Enabled | Adds device identifier to entity names |
+The Calculator device has **no configuration parameters**. It is created immediately after it is added, and its behaviour is controlled by its entities (time ranges, window sizes, sunrise/sunset switches) described below.
 
 ### Calculator Device Entities
 
@@ -283,9 +292,9 @@ Calculator devices use **numbered prefixes** in entity IDs:
 
 | Entity ID Pattern | Description | Attributes |
 |-------------------|-------------|------------|
-| `sensor.okte_N_lowest_price_window` | Combined lowest price window (today or tomorrow) | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_lowest_price_window_today` | Today's lowest price window | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_lowest_price_window_tomorrow` | Tomorrow's lowest price window | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
+| `sensor.okte_N_lowest_price_window` | Combined lowest price window (today or tomorrow) | see [Window sensor attributes](#window-sensor-attributes) |
+| `sensor.okte_N_lowest_price_window_today` | Today's lowest price window | see [Window sensor attributes](#window-sensor-attributes) |
+| `sensor.okte_N_lowest_price_window_tomorrow` | Tomorrow's lowest price window | see [Window sensor attributes](#window-sensor-attributes) |
 | `sensor.okte_N_lowest_price_window_size` | Window duration in H:MM format | - |
 | `sensor.okte_N_lowest_price_search_window_size` | Search window duration in H:MM format | - |
 
@@ -293,11 +302,25 @@ Calculator devices use **numbered prefixes** in entity IDs:
 
 | Entity ID Pattern | Description | Attributes |
 |-------------------|-------------|------------|
-| `sensor.okte_N_highest_price_window` | Combined highest price window (today or tomorrow) | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_highest_price_window_today` | Today's highest price window | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
-| `sensor.okte_N_highest_price_window_tomorrow` | Tomorrow's highest price window | `start_time`, `end_time`, `average_price`, `min_price`, `max_price`, `prices` |
+| `sensor.okte_N_highest_price_window` | Combined highest price window (today or tomorrow) | see [Window sensor attributes](#window-sensor-attributes) |
+| `sensor.okte_N_highest_price_window_today` | Today's highest price window | see [Window sensor attributes](#window-sensor-attributes) |
+| `sensor.okte_N_highest_price_window_tomorrow` | Tomorrow's highest price window | see [Window sensor attributes](#window-sensor-attributes) |
 | `sensor.okte_N_highest_price_window_size` | Window duration in H:MM format | - |
 | `sensor.okte_N_highest_price_search_window_size` | Search window duration in H:MM format | - |
+
+#### Window Sensor Attributes
+
+The state of the window sensors is `OK` when a window was found, otherwise `NOT`.
+
+| Attribute | Description |
+|-----------|-------------|
+| `found` | `true` when a window was found |
+| `start_time_local`, `end_time_local` | Start and end of the window in local time (`DD.MM.YYYY HH:MM`) |
+| `start_time_UTC`, `end_time_UTC` | Start and end of the window in UTC |
+| `periods` | Number of 15-minute periods of the window |
+| `window_size`, `window_search_size` | Size of the window and of the search window |
+| `min_price`, `max_price`, `avg_price` | Minimum, maximum and average price in the window (EUR/MWh) |
+| `records` | List of the periods of the window with their prices |
 
 #### 🎯 Binary Sensor Detectors
 
@@ -308,14 +331,12 @@ These detectors automatically turn **ON** when the current time is within the ca
 |-------------------|-------------|--------|
 | `binary_sensor.okte_N_detector_lowest_price` | ON when in lowest price window (combined) | ON / OFF |
 | `binary_sensor.okte_N_detector_lowest_price_today` | ON when in today's lowest price window | ON / OFF |
-| `binary_sensor.okte_N_detector_lowest_price_tomorrow` | ON when in tomorrow's lowest price window | ON / OFF |
 
 **Highest Price Detectors:**
 | Entity ID Pattern | Description | States |
 |-------------------|-------------|--------|
 | `binary_sensor.okte_N_detector_highest_price` | ON when in highest price window (combined) | ON / OFF |
 | `binary_sensor.okte_N_detector_highest_price_today` | ON when in today's highest price window | ON / OFF |
-| `binary_sensor.okte_N_detector_highest_price_tomorrow` | ON when in tomorrow's highest price window | ON / OFF |
 
 > 💡 **Use Case:** Perfect for automation triggers! Turn on battery charging when detector is ON, or reduce consumption during high price periods.
 
@@ -330,7 +351,7 @@ These detectors automatically turn **ON** when the current time is within the ca
 | `switch.okte_N_lowest_price_window_to_as_day_end` | Switch | Auto-set end time to sunset | OFF |
 | `time.okte_N_lowest_price_window_to_as_day_end_prefix` | Time | Shorten search window end before sunset by: | 00:00 |
 | `time.okte_N_lowest_price_time_to` | Time | End time of the search window | 23:59 |
-| `number.okte_N_lowest_price_window_size` | Number | Price window duration (hours) | 3 |
+| `number.okte_N_lowest_price_window_size` | Number | Price window size in 15-minute periods (1–96) | 3 (= 45 min) |
 
 **How Sunrise/Sunset Switches Work:**
 - ✅ **ON**: Time is automatically set to sunrise/sunset
@@ -351,7 +372,7 @@ These detectors automatically turn **ON** when the current time is within the ca
 | `switch.okte_N_highest_price_window_to_as_day_end` | Switch | Auto-set end time to sunset | OFF |
 | `time.okte_N_highest_price_window_to_as_day_end_prefix` | Time | Shorten search window end before sunset by: | 00:00 |
 | `time.okte_N_highest_price_time_to` | Time | Manual end time | 23:59 |
-| `number.okte_N_highest_price_window_size` | Number | Price window duration (hours) | 3 |
+| `number.okte_N_highest_price_window_size` | Number | Price window size in 15-minute periods (1–96) | 3 (= 45 min) |
 
 ### Example Card for Calculator Device
 
@@ -741,34 +762,34 @@ Automatically charge your battery when electricity prices are at their lowest:
 automation:
   - alias: "Battery - Charge During Lowest Price Window"
     description: "Charge battery when in lowest price window"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_1_detector_lowest_price
         to: "on"
-    condition:
+    conditions:
       - condition: numeric_state
         entity_id: sensor.battery_level
         below: 80
-    action:
-      - service: switch.turn_on
+    actions:
+      - action: switch.turn_on
         target:
           entity_id: switch.battery_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "⚡ Battery Charging Started"
           message: "Charging during low price period ({{ states('sensor.okte_current_price') }} €/MWh)"
   
   - alias: "Battery - Stop Charging After Lowest Price Window"
     description: "Stop charging when lowest price window ends"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_1_detector_lowest_price
         to: "off"
-    action:
-      - service: switch.turn_off
+    actions:
+      - action: switch.turn_off
         target:
           entity_id: switch.battery_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "🔋 Battery Charging Stopped"
           message: "Low price period ended"
@@ -782,21 +803,21 @@ Optimize heat pump operation based on electricity prices:
 automation:
   - alias: "Heat Pump - Boost During Low Prices"
     description: "Increase heat pump power during lowest price window"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_2_detector_lowest_price
         to: "on"
-    condition:
+    conditions:
       - condition: numeric_state
         entity_id: sensor.outdoor_temperature
         below: 5
-    action:
-      - service: climate.set_temperature
+    actions:
+      - action: climate.set_temperature
         target:
           entity_id: climate.heat_pump
         data:
           temperature: 23
-      - service: number.set_value
+      - action: number.set_value
         target:
           entity_id: number.heat_pump_power_limit
         data:
@@ -811,18 +832,18 @@ Reduce energy consumption during the most expensive periods:
 automation:
   - alias: "Energy - Reduce Consumption During High Prices"
     description: "Disable non-essential devices during highest price window"
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: binary_sensor.okte_3_detector_highest_price
         to: "on"
-    action:
-      - service: switch.turn_off
+    actions:
+      - action: switch.turn_off
         target:
           entity_id:
             - switch.electric_water_heater
             - switch.pool_pump
             - switch.ev_charger
-      - service: notify.mobile_app
+      - action: notify.mobile_app
         data:
           title: "⚠️ High Price Period"
           message: "Non-essential devices disabled ({{ states('sensor.okte_current_price') }} €/MWh)"
@@ -836,29 +857,29 @@ Automatically adjust the price window size based on battery level:
 automation:
   - alias: "Battery - Adjust Charging Window Size"
     description: "Increase charging window when battery is very low"
-    trigger:
-      - platform: numeric_state
+    triggers:
+      - trigger: numeric_state
         entity_id: sensor.battery_level
         below: 20
-    action:
-      - service: number.set_value
+    actions:
+      - action: number.set_value
         target:
           entity_id: number.okte_1_lowest_price_window_size
         data:
-          value: 6
+          value: 24  # 24 periods = 6 hours
   
   - alias: "Battery - Normal Charging Window Size"
     description: "Use normal window size when battery is OK"
-    trigger:
-      - platform: numeric_state
+    triggers:
+      - trigger: numeric_state
         entity_id: sensor.battery_level
         above: 50
-    action:
-      - service: number.set_value
+    actions:
+      - action: number.set_value
         target:
           entity_id: number.okte_1_lowest_price_window_size
         data:
-          value: 3
+          value: 12  # 12 periods = 3 hours
 ```
 
 ### Example 5: Price Notification
@@ -869,18 +890,18 @@ Get notified about tomorrow's lowest price window:
 automation:
   - alias: "OKTE - Tomorrow's Lowest Price Notification"
     description: "Send notification with tomorrow's cheapest time"
-    trigger:
-      - platform: time
+    triggers:
+      - trigger: time
         at: "14:30:00"
-    action:
-      - service: notify.mobile_app
+    actions:
+      - action: notify.mobile_app
         data:
           title: "⚡ Tomorrow's Lowest Price Window"
           message: >
             Lowest prices tomorrow:
-            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'start_time') }} - 
-            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'end_time') }}
-            Average: {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'average_price') }} €/MWh
+            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'start_time_local') }} - 
+            {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'end_time_local') }}
+            Average: {{ state_attr('sensor.okte_1_lowest_price_window_tomorrow', 'avg_price') }} €/MWh
 ```
 
 ### Automation Tips
@@ -888,7 +909,7 @@ automation:
 💡 **Best Practices:**
 
 1. **Use multiple Calculator devices** for different appliances (battery, heat pump, water heater)
-2. **Adjust window sizes** based on your needs (3h for battery, 6h for heat pump)
+2. **Adjust window sizes** based on your needs (window size in 15-minute periods, e.g. 12 periods = 3 h for battery, 24 periods = 6 h for heat pump)
 3. **Combine price detectors** with other conditions (temperature, battery level)
 4. **Set sunrise/sunset switches** for more natural automation patterns
 5. **Use notifications** to stay informed about price changes
