@@ -41,12 +41,11 @@
    - [Konfigurácia Calculator zariadenia](#konfigurácia-calculator-zariadenia)
    - [Entity Calculator zariadenia](#entity-calculator-zariadenia)
    - [Prefixy ID entít](#prefixy-id-entít)
-4. [Optimalizácia databázy](#-optimalizácia-databázy)
-5. [Cenové grafy](#-cenové-grafy)
-6. [HTML tabuľky cien](#-html-tabuľky-cien)
-7. [Príklady automatizácií](#-príklady-automatizácií)
-8. [Riešenie problémov](#-riešenie-problémov)
-9. [Podpora](#-podpora)
+4. [Cenové grafy](#-cenové-grafy)
+5. [HTML tabuľky cien](#-html-tabuľky-cien)
+6. [Príklady automatizácií](#-príklady-automatizácií)
+7. [Riešenie problémov](#-riešenie-problémov)
+8. [Podpora](#-podpora)
 
 ---
 
