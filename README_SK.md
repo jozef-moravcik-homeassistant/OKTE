@@ -34,7 +34,7 @@
    - [Cez Marketplace](#cez-hacs-odporúčané)
    - [Manuálna inštalácia](#manuálna-inštalácia)
    - [Konfigurácia zariadení](#konfigurácia-zariadení)
-2. [OKTE Master zariadenie](#-okte-master-zariadenie)
+2. [Master zariadenie](#-okte-master-zariadenie)
    - [Konfigurácia Master zariadenia](#konfigurácia-master-zariadenia)
    - [Entity Master zariadenia](#entity-master-zariadenia)
 3. [Calculator zariadenie](#-calculator-zariadenie)
@@ -83,7 +83,7 @@
 
 OKTE integrácia používa **dva typy virtuálnych zariadení**:
 
-#### 🎯 OKTE Master zariadenie
+#### 🎯 Master zariadenie
 - **Automaticky sa nainštaluje ako prvé** počas úvodného nastavenia
 - **Len JEDNO Master zariadenie** je povolené na jednu inštanciu Home Assistant
 - Zabezpečuje automatické sťahovanie údajov z OKTE API
@@ -91,16 +91,14 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 - **Predvolený čas sťahovania údajov: 14:00** (OKTE zverejňuje ceny na zajtra okolo 13:00)
 - Master zabezpečuje "failover function" ktorá použije v prípade výpadku zdroja údajov spriemerované ceny podľa jednotlivých periód a dní
 
-![Konfigurácia OKTE Master](docs/images/sk_device_okte_master_configuration.jpg)
+![Konfigurácia Master](docs/images/sk_device_okte_master_configuration.jpg)
 
 #### 🔢 Calculator zariadenia
 - Môžete pridať **neobmedzený počet** Calculator zariadení
 - Každé Calculator zariadenie je **nezávisle nastaviteľné**
 - Kalkulátory sú automaticky číslované: Calculator 1, Calculator 2, Calculator 3, atď.
-- Využíva údaje z OKTE Master na vyhľadanie optimálnych cenových okien
+- Využíva údaje z Master na vyhľadanie optimálnych cenových okien
 - Ideálne pre rôzne automatizačné scenáre (nabíjanie batérie, prevádzka tepelného čerpadla, atď.)
-
-![Konfigurácia Calculator](docs/images/sk_device_okte_calculator_configuration.jpg)
 
 #### Pridanie zariadení
 
@@ -115,25 +113,9 @@ OKTE integrácia používa **dva typy virtuálnych zariadení**:
 
 ![Aktualizácia zariadenia](docs/images/sk_device_update.jpg)
 
-#### Konfigurácia názvov entít
+## 📡 'Master' zariadenie
 
-Oba typy zariadení ponúkajú možnosť **zahrnúť názov zariadenia do názvov entít**:
-
-**OKTE Master:**
-- ✅ **Zapnuté** (predvolené): `sensor.okte_current_price`
-- ⬜ **Vypnuté**: `sensor.current_price`
-
-**Calculator zariadenia:**
-- ✅ **Zapnuté** (predvolené): `sensor.okte_1_lowest_price_window`
-- ⬜ **Vypnuté**: `sensor.lowest_price_window`
-
-> 💡 **Tip:** Nechajte zapnuté pri používaní viacerých Calculator zariadení, aby ste ich ľahko rozlíšili!
-
----
-
-## 📡 OKTE Master zariadenie
-
-**OKTE Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API, ukladanie údajov a výpočet priemerných cien pre prípad výpadku zdroja údajov. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
+**Master** zariadenie je jadro komponenty, ktorá zabezpečuje celú komunikáciu s OKTE API, ukladanie údajov a výpočet priemerných cien pre prípad výpadku zdroja údajov. Automaticky sťahuje údaje o cenách elektriny a poskytuje ich systému.
 
 ### Konfigurácia Master zariadenia
 
@@ -165,7 +147,7 @@ Príklad: ak sa preruší spojenie so zdrojom OKTE pri dnešnom sťahovaní, pro
 
 Master zariadenie vytvára nasledujúce entity:
 
-![Entity OKTE Master](docs/images/sk_card_okte_master_entities.jpg)
+![Entity Master](docs/images/sk_card_okte_master_entities.jpg)
 
 #### 📊 Cenové senzory
 
@@ -266,7 +248,7 @@ column_span: 2
 
 ## 🔢 Calculator zariadenie
 
-**Calculator** zariadenie využíva údaje z OKTE Master na vyhľadanie optimálnych časových okien s najnižšími alebo najvyššími cenami elektriny. Môžete pridať **neomedzený počet** Calculator zariadení, každé s nezávislou konfiguráciou pre rôzne automatizačné scenáre.
+**Calculator** zariadenie využíva údaje z Master na vyhľadanie optimálnych časových okien s najnižšími alebo najvyššími cenami elektriny. Môžete pridať **neomedzený počet** Calculator zariadení, každé s nezávislou konfiguráciou pre rôzne automatizačné scenáre.
 
 ### Konfigurácia Calculator zariadenia
 
