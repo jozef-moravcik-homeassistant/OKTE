@@ -34,7 +34,7 @@
    - [Via Marketplace](#via-hacs-recommended)
    - [Manual Installation](#manual-installation)
    - [Device Configuration](#device-configuration)
-2. [OKTE Master Device](#-okte-master-device)
+2. [Master Device](#-okte-master-device)
    - [Master Device Configuration](#master-device-configuration)
    - [Master Device Entities](#master-device-entities)
 3. [Calculator Device](#-calculator-device)
@@ -83,7 +83,7 @@
 
 The OKTE integration uses **two types of virtual devices**:
 
-#### 🎯 OKTE Master Device
+#### 🎯 Master Device
 - **Automatically installed first** during initial setup
 - **Only ONE Master device** is allowed per Home Assistant instance
 - Handles automatic data fetching from OKTE API
@@ -91,13 +91,13 @@ The OKTE integration uses **two types of virtual devices**:
 - **Default data fetch time: 14:00** (OKTE publishes next day prices around 13:00)
 - Master provides a "failover function" that, in the case of data source outage, uses averaged prices based on individual periods and days.
 
-![OKTE Master Configuration](docs/images/en_device_okte_master_configuration.jpg)
+![Master Configuration](docs/images/en_device_okte_master_configuration.jpg)
 
 #### 🔢 Calculator Devices
 - You can add **unlimited number** of Calculator devices
 - Each Calculator device is **independently configured**
 - Calculators are automatically numbered: Calculator 1, Calculator 2, Calculator 3, etc.
-- Uses data from OKTE Master to find optimal price windows
+- Uses data from Master to find optimal price windows
 - Perfect for different automation scenarios (battery charging, heat pump operation, etc.)
 
 #### Adding Devices
@@ -113,25 +113,9 @@ The OKTE integration uses **two types of virtual devices**:
 
 ![Device Update](docs/images/en_device_update.jpg)
 
-#### Entity Name Configuration
+## 📡 'Master' Device
 
-Both device types offer an option to **include device name in entity names**:
-
-**OKTE Master:**
-- ✅ **Enabled** (default): `sensor.okte_current_price`
-- ⬜ **Disabled**: `sensor.current_price`
-
-**Calculator Devices:**
-- ✅ **Enabled** (default): `sensor.okte_1_lowest_price_window`
-- ⬜ **Disabled**: `sensor.lowest_price_window`
-
-> 💡 **Tip:** Keep this enabled when using multiple Calculator devices to easily distinguish between them!
-
----
-
-## 📡 OKTE Master Device
-
-The **OKTE Master** device is the core component that handles all communication with the OKTE API, data storage and calculation of average prices in the event of a data source failure. It automatically downloads electricity price data and provides it to the system.
+The **Master** device is the core component that handles all communication with the OKTE API, data storage and calculation of average prices in the event of a data source failure. It automatically downloads electricity price data and provides it to the system.
 
 ### Master Device Configuration
 
@@ -163,7 +147,7 @@ Example: If the connection to the OKTE source is lost during today's data retrie
 
 The Master device creates the following entities:
 
-![OKTE Master Entities](docs/images/en_card_okte_master_entities.jpg)
+![Master Entities](docs/images/en_card_okte_master_entities.jpg)
 
 #### 📊 Price Sensors
 
@@ -264,7 +248,7 @@ column_span: 2
 
 ## 🔢 Calculator Device
 
-The **Calculator** device uses data from the OKTE Master to find optimal time windows with the lowest or highest electricity prices. You can add **unlimited** Calculator devices, each with independent configuration for different automation scenarios.
+The **Calculator** device uses data from the Master to find optimal time windows with the lowest or highest electricity prices. You can add **unlimited** Calculator devices, each with independent configuration for different automation scenarios.
 
 ### Calculator Device Configuration
 
