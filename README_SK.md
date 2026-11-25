@@ -150,11 +150,12 @@ Home Assistant vždy zobrazuje pred názvom entity názov zariadenia: `<názov z
   - **Priemery zo všetkých dní** - vypočítava priemery za jednotlivé periódy zo všetkých dní a použije ich ak zdroj údajov OKTE nie je k dispozícii a údaje zo senzorov sú neaktuálne, alebo neplatné.
   - **Disabled** - funkcia Data Failover je vypnutá, ak je nedostupný zdroj dát OKTE a sensory majú neaktuálne, alebo neplatné údaje, údaje v sensoroch zostanú neplatné.
 
-> ⚠️ **Ako funguje data failover:**
-Ak sa preruší spojenie so zdrojom dát OKTE a dáta sa v senzoroch stanú plynutím času neaktuálne, do senzorov sa automaticky načítajú cenové priemery vypočítané pre každú periódu.
-Príklad: ak sa preruší spojenie so zdrojom OKTE pri dnešnom sťahovaní, proces sťahovania sa niekoľkokrát opakuje. Ak sa spojenie so zdrojom dát neobnoví do polnoci, o pol noci sa údaje z nasledujúceho dňa presunú do aktuálneho dňa. Ale ak zdroj údajov zostane nedostupný aj v ďalšom cykle, alebo o pol noci, do sensorov sa automaticky načítajú cenové priemery vypočítané z predchádzajúcich údajov. Takto sa zabezpečí, že nezlyhajú automatizácie a procesy závislé od týchto údajov. Po obnovení spojenia s dátovým zdrojom sa údaje do senzorov automaticky načítajú z dátového zdroja.
-
-> ⚠️ **Dôležité:** OKTE zverejňuje ceny na zajtra okolo **13:00**, takže predvolený čas sťahovania **14:00** zabezpečuje, že budete mať vždy aktuálne údaje pre oba dni. Údaje nasledujúceho dňa sa o pol noci automaticky presunú do aktuálneho dňa, preto nie je potrebné po pol noci údaje znovu sťahovať. Údaje nasledujúceho dňa sa doplnia až pri ďalšom sťahovaní (default 14:00), V prípade neúspešného stiahnutia údajov, napríklad z dôvodu prerušeného pripojenia k internetu, alebo poruchy na strane OKTE, bude sa integrácia pokúšať stiahnuť údaje každú minútu až dokiaľ sa úspešne nestiahnu. Tento stav je indikovaný sensorom sensor.okte_connection_status a chybový kód je zaznamenaný v sensore sensor.okte_error_code. Údaje zostávajú v systéme zapamätané aj po reštarte HA.
+> ⚠️ **Dôležité:**
+>   - **OKTE zverejňuje ceny na nasledujúci deň približne o 13:00**, takže predvolený čas načítania o 14:00 (ktorý možno zmeniť) zabezpečuje aktuálne údaje na dnešný aj zajtrajší deň.
+>   - **Polnoc:** údaje na nasledujúci deň sa automaticky presunú do aktuálneho dňa, takže po polnoci nie je potrebné sťahovanie; údaje na ďalší deň sa doplnia pri najbližšom naplánovanom sťahovaní.
+>   - **Zlyhanie sťahovania** (napr. v dôsledku prerušenia internetového pripojenia alebo problému na strane OKTE): integrácia sa pokúša o opätovné načítanie každú minútu, kým nie je úspešná. Stav sa zobrazuje v senzore `sensor.okte_connection_status` a prípadný chybový kód v senzore `sensor.okte_error_code`.
+>   - **Ukladanie:** údaje sa uchovávajú v úložisku systému HA, takže zostávajú k dispozícii aj po reštarte HA.
+>   - **Záložný režim (failover):** ak sa pripojenie k OKTE neobnoví a údaje v senzoroch zastarajú (napr. údaje na nasledujúci deň sa o polnoci presunuli do aktuálneho dňa, ale následné sťahovanie zlyhalo), do senzorov sa automaticky načítajú priemerné ceny vypočítané z predchádzajúcich údajov pre dané časové úseky. Vďaka tomu automatizácie a procesy závislé od týchto údajov neprestanú fungovať. Hneď ako sa pripojenie obnoví, údaje z OKTE sa do senzorov automaticky načítajú.
 
 ### Entity Master zariadenia
 
