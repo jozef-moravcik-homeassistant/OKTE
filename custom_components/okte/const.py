@@ -95,7 +95,6 @@ SERVICE_FETCH_DATA = "fetch_data"
 # Dispatcher signals #########################################################################################################
 ##############################################################################################################################
 SIGNAL_FEEDBACK_UPDATE = DOMAIN + "_feedback_update_{}"   # entry_id - refresh all entities of an entry
-SIGNAL_NAME_UPDATE = DOMAIN + "_name_update_{}"           # entry_id - device renamed, refresh entity names
 SIGNAL_MASTER_DATA_UPDATED = DOMAIN + "_master_data_updated"  # Master price data changed (fetch, rollover, failover)
 
 ##############################################################################################################################
@@ -117,9 +116,12 @@ DEVICE_TYPE_CALCULATOR = "calculator"
 CONF_DEVICE_TYPE = "device_type"
 CONF_DEVICE_NAME = "device_name"
 DEFAULT_DEVICE_NAME = "Device 1"
+MASTER_DEVICE_NAME = "OKTE"                  # Entity names of the Master: "OKTE Current Price"
+MASTER_ENTRY_TITLE = "Master"                # Title of the Master config entry (shown above the device name)
+LEGACY_MASTER_DEVICE_NAME = "OKTE Master"    # Master device name used by older versions
 
-CONF_INCLUDE_DEVICE_NAME_IN_ENTITY = "include_device_name_in_entity"
-DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY = True
+# Removed setting (Home Assistant always puts the device name in front of the entity name) - ignored if still present
+LEGACY_CONF_INCLUDE_DEVICE_NAME_IN_ENTITY = "include_device_name_in_entity"
 
 ##############################################################################################################################
 # Configuration keys - Master Device #########################################################################################
@@ -302,6 +304,11 @@ async def async_load_translations(hass) -> dict:
     return await hass.async_add_executor_job(_load)
 
 
+def entity_name(translated_name: str) -> str:
+    """Entity part of the name - Home Assistant puts the device name in front: '<device> <translated_name>'."""
+    return translated_name
+
+
 def apply_sun_prefix(sun_time, prefix, is_from):
     """Apply prefix to sunrise/sunset time (both datetime.time, HH:MM).
 
@@ -333,7 +340,6 @@ class OkteRuntimeData:
     instance: Any
     device_type: str
     device_name: str
-    include_device_name_in_entity: bool
     options: dict = field(default_factory=dict)  # Copy of entry.options used by update_listener for comparison
     fetch_time: str | None = None  # Master only
     master_device: str | None = None  # Calculator only

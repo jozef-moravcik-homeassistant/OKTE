@@ -12,10 +12,9 @@ import logging
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     DEVICE_TYPE_CALCULATOR,
@@ -31,9 +30,9 @@ from .const import (
     MODEL_CALCULATOR,
     MODEL_MASTER,
     SIGNAL_FEEDBACK_UPDATE,
-    SIGNAL_NAME_UPDATE,
     VERSION,
     async_load_translations,
+    entity_name,
     get_calculator_number_from_name,
 )
 
@@ -51,7 +50,7 @@ CALCULATOR_BINARY_SENSORS = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up binary sensor entities (Calculator devices only)."""
     device_type = entry.runtime_data.device_type
@@ -72,8 +71,8 @@ async def async_setup_entry(
 class BinarySensorEntityDefinition(BinarySensorEntity):
     """OKTE detector - ON while the current time is inside the found price window."""
 
-    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
-    _attr_has_entity_name = False
+    # Home Assistant puts the device name in front of the entity name: "<device> <name>"
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -101,7 +100,7 @@ class BinarySensorEntityDefinition(BinarySensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{entity_id}"
 
         translated = (translations or {}).get("entity", {}).get("binary_sensor", {}).get(entity_id, {}).get("name")
-        self._original_translated_name = translated or name
+        self._attr_name = entity_name(translated or name)
 
         self._attr_icon = icon
         self._attr_is_on = False
@@ -119,26 +118,11 @@ class BinarySensorEntityDefinition(BinarySensorEntity):
             configuration_url=DOCUMENTATION_URL,
         )
 
-    @property
-    def name(self) -> str:
-        """Return the name of the entity - dynamically generated."""
-        translated_name = self._original_translated_name
-        if not self._instance.settings.include_device_name_in_entity:
-            return translated_name
-        if self._device_type == DEVICE_TYPE_MASTER:
-            return f"OKTE - {translated_name}"
-        device_entry = self.device_entry
-        device_label = device_entry.name_by_user if device_entry and device_entry.name_by_user else self._instance.settings.device_name
-        return f"OKTE - {device_label} - {translated_name}"
-
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_FEEDBACK_UPDATE.format(self._entry_id), self._handle_feedback_update)
-        )
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self._handle_name_update)
         )
 
     @callback
@@ -152,14 +136,3 @@ class BinarySensorEntityDefinition(BinarySensorEntity):
             if new_value is not None:
                 self._attr_is_on = new_value
         self.async_write_ha_state()
-
-    @callback
-    def _handle_name_update(self) -> None:
-        """Device renamed - write the state again and refresh the displayed name in the registry."""
-        self.async_write_ha_state()
-        entity_registry = er.async_get(self.hass)
-        entity_entry = entity_registry.async_get(self.entity_id)
-        if entity_entry:
-            current_name = self.name
-            if entity_entry.name != current_name and entity_entry.original_name != current_name:
-                entity_registry.async_update_entity(self.entity_id, original_name=current_name)

@@ -2,6 +2,7 @@
   "domain": "okte",
   "name": "OKTE - Slovak Energy Market",
   "after_dependencies": ["recorder", "sun"],
+  "categories": ["energy"],
   "codeowners": ["@jozef-moravcik-homeassistant"],
   "config_flow": true,
   "dependencies": [],

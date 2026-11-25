@@ -12,9 +12,10 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.const import EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     DEVICE_TYPE_MASTER,
@@ -24,9 +25,9 @@ from .const import (
     MANUFACTURER,
     MODEL_MASTER,
     SIGNAL_FEEDBACK_UPDATE,
-    SIGNAL_NAME_UPDATE,
     VERSION,
     async_load_translations,
+    entity_name,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities (Master device only)."""
     if entry.runtime_data.device_type != DEVICE_TYPE_MASTER:
@@ -63,16 +64,14 @@ class OkteButton(ButtonEntity):
 
         self.entity_id = f"button.{ENTITY_PREFIX}_{self._key}"
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{self._key}"
-        self._attr_has_entity_name = False
+        # Home Assistant puts the device name in front of the entity name: "<device> <name>"
+        self._attr_has_entity_name = True
         self._attr_translation_key = self._key
         self._attr_icon = self._icon
         self._attr_entity_category = EntityCategory.CONFIG
 
         translated = (translations or {}).get("entity", {}).get("button", {}).get(self._key, {}).get("name")
-        self._translated_name = translated or self._default_name
-        self._attr_name = (
-            f"OKTE - {self._translated_name}" if instance.settings.include_device_name_in_entity else self._translated_name
-        )
+        self._attr_name = entity_name(translated or self._default_name)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -84,13 +83,6 @@ class OkteButton(ButtonEntity):
             model=MODEL_MASTER,
             sw_version=VERSION,
             configuration_url=DOCUMENTATION_URL,
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
 
     def _notify_entities(self) -> None:

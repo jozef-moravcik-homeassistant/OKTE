@@ -29,7 +29,6 @@ from .const import (
     DEFAULT_FAILOVER_WEEKS,
     DEFAULT_FETCH_DAYS,
     DEFAULT_FETCH_TIME,
-    DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
     DEFAULT_MASTER_DEVICE,
     DEFAULT_PRICE_UNIT,
     DEFAULT_TIME_FROM,
@@ -600,7 +599,6 @@ class OKTE_Master_Instance:
     class Settings:
         """Settings for master device."""
         device_name: str = DEFAULT_DEVICE_NAME
-        include_device_name_in_entity: bool = DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY
         fetch_time: str = DEFAULT_FETCH_TIME
         fetch_days: int = DEFAULT_FETCH_DAYS
         data_failover_mode: str = DEFAULT_DATA_FAILOVER_MODE
@@ -1392,7 +1390,6 @@ class OKTE_Window_Instance:
     class Settings:
         """Settings for window device."""
         device_name: str = DEFAULT_DEVICE_NAME
-        include_device_name_in_entity: bool = DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY
         master_device: str = DEFAULT_MASTER_DEVICE
         window_size: int = DEFAULT_WINDOW_SIZE
         time_from: str = DEFAULT_TIME_FROM

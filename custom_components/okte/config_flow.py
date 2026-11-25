@@ -23,7 +23,6 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
     TimeSelector,
 )
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_DATA_FAILOVER_MODE,
@@ -32,19 +31,20 @@ from .const import (
     CONF_FAILOVER_DAYS,
     CONF_FAILOVER_WEEKS,
     CONF_FETCH_TIME,
-    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
     CONF_MASTER_DEVICE,
     CONF_PRICE_UNIT,
     DEFAULT_DATA_FAILOVER_MODE,
     DEFAULT_FAILOVER_DAYS,
     DEFAULT_FAILOVER_WEEKS,
     DEFAULT_FETCH_TIME,
-    DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
     DEFAULT_PRICE_UNIT,
     DEVICE_TYPE_CALCULATOR,
     DEVICE_TYPE_MASTER,
     DOMAIN,
     FAILOVER_MODES,
+    LEGACY_CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
+    MASTER_DEVICE_NAME,
+    MASTER_ENTRY_TITLE,
     MAX_FAILOVER_DAYS,
     MAX_FAILOVER_WEEKS,
     MIN_FAILOVER_DAYS,
@@ -153,15 +153,12 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(f"{DOMAIN}_master")
         self._abort_if_unique_id_configured()
 
-        device_name = "OKTE Master"
+        device_name = MASTER_DEVICE_NAME
         return self.async_create_entry(
-            title=device_name,
+            title=MASTER_ENTRY_TITLE,
             data={
                 CONF_DEVICE_TYPE: DEVICE_TYPE_MASTER,
                 CONF_DEVICE_NAME: device_name,
-                CONF_INCLUDE_DEVICE_NAME_IN_ENTITY: import_data.get(
-                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY
-                ),
                 CONF_FETCH_TIME: fetch_time,
             },
         )
@@ -176,8 +173,8 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # IMPORTANT: Preserve CONF_DEVICE_TYPE before update
             device_type = self._data.get(CONF_DEVICE_TYPE)
             
-            # Master device always has fixed name "OKTE Master"
-            device_name = "OKTE Master"
+            # Master device always has fixed name "OKTE"
+            device_name = MASTER_DEVICE_NAME
             self._data[CONF_DEVICE_NAME] = device_name
             self._data.update(user_input)
             
@@ -193,7 +190,7 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             LOGGER.debug("Creating Master entry")
             
             return self.async_create_entry(
-                title=device_name,
+                title=MASTER_ENTRY_TITLE,
                 data=self._data,
             )
 
@@ -204,10 +201,6 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         data_schema = vol.Schema(
             {
-                vol.Required(
-                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                    default=DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                ): cv.boolean,
                 vol.Required(
                     CONF_FETCH_TIME,
                     default=default_time,
@@ -238,73 +231,32 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_window_parameters(self, user_input=None):
-        """Handle Window device parameters."""
-        errors = {}
-
-        if user_input is not None:
-            # IMPORTANT: Preserve CONF_DEVICE_TYPE before update
-            device_type = self._data.get(CONF_DEVICE_TYPE)
-            
-            self._data.update(user_input)
-            
-            # Restore CONF_DEVICE_TYPE (it was set in async_step_user)
-            if device_type:
-                self._data[CONF_DEVICE_TYPE] = device_type
-            
-            # Get master device entry_id automatically
-            existing_entries = self.hass.config_entries.async_entries(DOMAIN)
-            master_entry = next(
-                (entry for entry in existing_entries if entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_MASTER),
-                None
-            )
-            
-            if not master_entry:
-                return self.async_abort(reason="no_master_device")
-            
-            # Store master_device entry_id automatically
-            self._data[CONF_MASTER_DEVICE] = master_entry.entry_id
-            
-            # Get next available calculator number
-            calculator_number = get_next_calculator_number(self.hass)
-            device_name = f"Calculator {calculator_number}"
-            self._data[CONF_DEVICE_NAME] = device_name
-            
-            unique_id = f"{DOMAIN}_calculator_{calculator_number}"
-            
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
-            
-            LOGGER.debug("Creating Calculator entry %s", device_name)
-            
-            return self.async_create_entry(
-                title=device_name,
-                data=self._data,
-            )
-
-        # Check if master device exists
+        """Create a Calculator device - it has no parameters, so no form is shown."""
+        # Get master device entry_id automatically
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
-        has_master = any(
-            entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_MASTER 
-            for entry in existing_entries
+        master_entry = next(
+            (entry for entry in existing_entries if entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_MASTER),
+            None
         )
-        
-        if not has_master:
+        if not master_entry:
             return self.async_abort(reason="no_master_device")
 
-        # Calculator device configuration - only prefix checkbox
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                    default=DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                ): cv.boolean,
-            }
-        )
+        self._data[CONF_DEVICE_TYPE] = DEVICE_TYPE_CALCULATOR
+        # Store master_device entry_id automatically
+        self._data[CONF_MASTER_DEVICE] = master_entry.entry_id
 
-        return self.async_show_form(
-            step_id="window_parameters",
-            data_schema=data_schema,
-            errors=errors,
+        # Get next available calculator number
+        calculator_number = get_next_calculator_number(self.hass)
+        device_name = f"Calculator {calculator_number}"
+        self._data[CONF_DEVICE_NAME] = device_name
+
+        await self.async_set_unique_id(f"{DOMAIN}_calculator_{calculator_number}")
+        self._abort_if_unique_id_configured()
+
+        LOGGER.debug("Creating Calculator entry %s", device_name)
+        return self.async_create_entry(
+            title=device_name,
+            data=self._data,
         )
 
     @staticmethod
@@ -312,6 +264,12 @@ class OkteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
         return OkteOptionsFlowHandler()
+
+    @classmethod
+    @callback
+    def async_supports_options_flow(cls, config_entry) -> bool:
+        """Only the Master device has configurable parameters."""
+        return config_entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_MASTER) == DEVICE_TYPE_MASTER
 
 
 class OkteOptionsFlowHandler(config_entries.OptionsFlow):
@@ -328,8 +286,8 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
         
         if device_type == DEVICE_TYPE_MASTER:
             return await self.async_step_master_parameters(user_input)
-        else:
-            return await self.async_step_window_parameters(user_input)
+        # Calculator devices have no configurable parameters
+        return self.async_abort(reason="no_options")
 
     async def async_step_master_parameters(self, user_input=None):
         """Handle Master device parameters in options."""
@@ -339,13 +297,11 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
             user_input = _time_to_str(user_input)
 
             # Keep stored entity values (window sizes, times, switches) - merge instead of replace
-            return self.async_create_entry(title="", data={**self.config_entry.options, **user_input})
+            options = {**self.config_entry.options, **user_input}
+            options.pop(LEGACY_CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, None)  # Removed setting
+            return self.async_create_entry(title="", data=options)
 
         # Get current values
-        current_include_device_name = self.config_entry.options.get(
-            CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-            self.config_entry.data.get(CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY)
-        )
         current_fetch_time_str = self.config_entry.options.get(
             CONF_FETCH_TIME,
             self.config_entry.data.get(CONF_FETCH_TIME, DEFAULT_FETCH_TIME)
@@ -378,10 +334,6 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
         data_schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                    default=current_include_device_name,
-                ): cv.boolean,
-                vol.Required(
                     CONF_FETCH_TIME,
                     default=current_fetch_time,
                 ): TimeSelector(config={}),
@@ -406,38 +358,6 @@ class OkteOptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="master_parameters", 
-            data_schema=data_schema,
-            errors=errors,
-        )
-
-    async def async_step_window_parameters(self, user_input=None):
-        """Handle Window device parameters in options."""
-        errors = {}
-
-        if user_input is not None:
-            # Keep stored entity values (window sizes, times, switches) - merge instead of replace
-            return self.async_create_entry(title="", data={**self.config_entry.options, **user_input})
-
-        # Get current values
-        current_include_device_name = self.config_entry.options.get(
-            CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-            self.config_entry.data.get(CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY)
-        )
-
-        # Note: Master device selector is NOT shown - it cannot be changed
-        # Note: Device name is NOT shown - it cannot be changed
-        # Note: Window size, time from, time to are now separate number entities
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                    default=current_include_device_name,
-                ): cv.boolean,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="window_parameters", 
             data_schema=data_schema,
             errors=errors,
         )

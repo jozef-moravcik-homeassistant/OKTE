@@ -5,19 +5,11 @@
         "title": "OKTE Master zařízení",
         "description": "Konfigurace Master zařízení pro stahování dat z API",
         "data": {
-          "include_device_name_in_entity": "Před název entit vložit 'OKTE -'",
           "fetch_time": "Čas denního stahování (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Počet týdnů započtených do průměrů",
           "failover_days": "Počet dnů započtených do průměrů",
           "price_unit": "Jednotka cenových senzorů"
-        }
-      },
-      "window_parameters": {
-        "title": "OKTE Calculator zařízení",
-        "description": "Konfigurace OKTE Calculator zařízení pro výpočet časových oken",
-        "data": {
-          "include_device_name_in_entity": "Před název entit vložit název zařízení"
         }
       }
     },
@@ -32,21 +24,16 @@
         "title": "Nastavení OKTE Master zařízení",
         "description": "Konfigurace nastavení Master zařízení",
         "data": {
-          "include_device_name_in_entity": "Před název entit vložit 'OKTE -'",
           "fetch_time": "Čas denního stahování (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Počet týdnů započtených do průměrů",
           "failover_days": "Počet dnů započtených do průměrů",
           "price_unit": "Jednotka cenových senzorů"
         }
-      },
-      "window_parameters": {
-        "title": "Nastavení OKTE Calculator zařízení",
-        "description": "Konfigurace nastavení OKTE Calculator zařízení",
-        "data": {
-          "include_device_name_in_entity": "Před název entit vložit název zařízení"
-        }
       }
+    },
+    "abort": {
+      "no_options": "Calculator zařízení nemá žádná nastavení."
     }
   },
   "services": {
@@ -56,12 +43,6 @@
     }
   },
   "selector": {
-    "device_type": {
-      "options": {
-        "master": "Master (stahování dat z API)",
-        "window": "OKTE Calculator (výpočet časových oken)"
-      }
-    },
     "data_failover_mode": {
       "options": {
         "weekdays": "Průměry podle dnů v týdnu",
@@ -234,6 +215,9 @@
     },
     "auto_mode_sunset": {
       "message": "Čas nelze změnit - nastavuje se automaticky podle západu slunce. Nejprve vypněte příslušný přepínač."
+    },
+    "no_master_device": {
+      "message": "Není nakonfigurováno žádné Master zařízení. Nejprve přidejte Master zařízení."
     }
   }
 }

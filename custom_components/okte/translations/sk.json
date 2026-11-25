@@ -5,19 +5,11 @@
         "title": "OKTE Master zariadenie",
         "description": "Konfigurácia Master zariadenia pre sťahovanie dát z API",
         "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
           "fetch_time": "Čas denného sťahovania (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Počet týždňov započítaných do priemerov",
           "failover_days": "Počet dní započítaných do priemerov",
           "price_unit": "Jednotka cenových senzorov"
-        }
-      },
-      "window_parameters": {
-        "title": "OKTE Calculator zariadenie",
-        "description": "Konfigurácia OKTE Calculator zariadenia pre výpočet časových okien",
-        "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia"
         }
       }
     },
@@ -32,21 +24,16 @@
         "title": "Nastavenia OKTE Master zariadenia",
         "description": "Konfigurácia nastavení Master zariadenia",
         "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť 'OKTE -'",
           "fetch_time": "Čas denného sťahovania (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Počet týždňov započítaných do priemerov",
           "failover_days": "Počet dní započítaných do priemerov",
           "price_unit": "Jednotka cenových senzorov"
         }
-      },
-      "window_parameters": {
-        "title": "Nastavenia OKTE Calculator zariadenia",
-        "description": "Konfigurácia nastavení OKTE Calculator zariadenia",
-        "data": {
-          "include_device_name_in_entity": "Pred názov entít vložiť názov zariadenia"
-        }
       }
+    },
+    "abort": {
+      "no_options": "Calculator zariadenie nemá žiadne nastavenia."
     }
   },
   "services": {
@@ -56,12 +43,6 @@
     }
   },
   "selector": {
-    "device_type": {
-      "options": {
-        "master": "Master (sťahovanie dát z API)",
-        "window": "OKTE Calculator (výpočet časových okien)"
-      }
-    },
     "data_failover_mode": {
       "options": {
         "weekdays": "Priemery podľa dní v týždni",
@@ -234,6 +215,9 @@
     },
     "auto_mode_sunset": {
       "message": "Čas nie je možné zmeniť - nastavuje sa automaticky podľa západu slnka. Najprv vypnite príslušný prepínač."
+    },
+    "no_master_device": {
+      "message": "Nie je nakonfigurované žiadne Master zariadenie. Najprv pridajte Master zariadenie."
     }
   }
 }

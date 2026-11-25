@@ -13,6 +13,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import ServiceValidationError
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import device_registry as dr, entity_registry as er, issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
@@ -26,7 +27,6 @@ from .const import (
     CONF_FAILOVER_DAYS,
     CONF_FAILOVER_WEEKS,
     CONF_FETCH_TIME,
-    CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
     CONF_MASTER_DEVICE,
     CONF_PRICE_UNIT,
     DEFAULT_DATA_FAILOVER_MODE,
@@ -35,10 +35,8 @@ from .const import (
     DEFAULT_FAILOVER_WEEKS,
     DEFAULT_FETCH_DAYS,
     DEFAULT_FETCH_TIME,
-    DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
     DEFAULT_MASTER_DEVICE,
     DEFAULT_PRICE_UNIT,
-    DEVICE_TYPE_CALCULATOR,
     DEVICE_TYPE_MASTER,
     DOMAIN,
     ENTITY_HIGHEST_AUTO_TIME_FROM,
@@ -51,13 +49,15 @@ from .const import (
     ENTITY_LOWEST_TIME_FROM,
     ENTITY_LOWEST_TIME_TO,
     ENTITY_LOWEST_WINDOW_SIZE,
+    LEGACY_CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
+    LEGACY_MASTER_DEVICE_NAME,
     MASTER_DATA_DEBOUNCE_DELAY,
+    MASTER_DEVICE_NAME,
+    MASTER_ENTRY_TITLE,
     SERVICE_FETCH_DATA,
     SIGNAL_FEEDBACK_UPDATE,
     SIGNAL_MASTER_DATA_UPDATED,
-    SIGNAL_NAME_UPDATE,
     OkteRuntimeData,
-    async_load_translations,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -74,10 +74,8 @@ CONFIG_SCHEMA = vol.Schema(
             vol.Schema(
                 {
                     vol.Optional(CONF_FETCH_TIME, default=DEFAULT_FETCH_TIME): cv.time,
-                    vol.Optional(
-                        CONF_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                        default=DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY,
-                    ): cv.boolean,
+                    # Removed setting - still accepted in YAML, but ignored
+                    vol.Remove(LEGACY_CONF_INCLUDE_DEVICE_NAME_IN_ENTITY): cv.boolean,
                 }
             ),
         )
@@ -115,14 +113,13 @@ def _parse_time_from_config(time_str, default_time):
     return default_time
 
 
-def _create_master_instance(entry: ConfigEntry, device_name: str, include_device_name_in_entity: bool):
+def _create_master_instance(entry: ConfigEntry, device_name: str):
     """Create and configure the Master instance."""
     from .okte import OKTE_Master_Instance
 
     instance = OKTE_Master_Instance()
     settings = instance.settings
     settings.device_name = device_name
-    settings.include_device_name_in_entity = include_device_name_in_entity
     settings.fetch_time = _option(entry, CONF_FETCH_TIME, DEFAULT_FETCH_TIME)
     settings.fetch_days = DEFAULT_FETCH_DAYS  # Fixed value, not configurable
     settings.data_failover_mode = _option(entry, CONF_DATA_FAILOVER_MODE, DEFAULT_DATA_FAILOVER_MODE)
@@ -132,13 +129,12 @@ def _create_master_instance(entry: ConfigEntry, device_name: str, include_device
     return instance
 
 
-def _create_calculator_instance(entry: ConfigEntry, device_name: str, include_device_name_in_entity: bool):
+def _create_calculator_instance(entry: ConfigEntry, device_name: str):
     """Create and configure a Calculator instance (values of its entities are stored in entry.options)."""
     from .okte import OKTE_Window_Instance
 
     instance = OKTE_Window_Instance()
     instance.settings.device_name = device_name
-    instance.settings.include_device_name_in_entity = include_device_name_in_entity
     instance.settings.master_device = _option(entry, CONF_MASTER_DEVICE, DEFAULT_MASTER_DEVICE)
 
     instance.number_values = {
@@ -166,13 +162,14 @@ def _create_calculator_instance(entry: ConfigEntry, device_name: str, include_de
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OKTE from a config entry."""
     device_type = _option(entry, CONF_DEVICE_TYPE, DEVICE_TYPE_MASTER)
+    if device_type == DEVICE_TYPE_MASTER:
+        _async_migrate_master_device_name(hass, entry)
     device_name = _option(entry, CONF_DEVICE_NAME, DEFAULT_DEVICE_NAME)
-    include_device_name_in_entity = _option(entry, CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY)
 
     if device_type == DEVICE_TYPE_MASTER:
-        instance = _create_master_instance(entry, device_name, include_device_name_in_entity)
+        instance = _create_master_instance(entry, device_name)
     else:
-        instance = _create_calculator_instance(entry, device_name, include_device_name_in_entity)
+        instance = _create_calculator_instance(entry, device_name)
 
     instance.hass = hass
     instance._entry_id = entry.entry_id
@@ -184,7 +181,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             instance=instance,
             device_type=device_type,
             device_name=device_name,
-            include_device_name_in_entity=include_device_name_in_entity,
             options=dict(entry.options),  # Used by update_listener for comparison
             fetch_time=instance.settings.fetch_time if device_type == DEVICE_TYPE_MASTER else None,
             master_device=instance.settings.master_device if device_type != DEVICE_TYPE_MASTER else None,
@@ -198,10 +194,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         platforms_forwarded = True
-        _async_disable_registry_entity_name_prefix(hass, entry)
+        _async_remove_legacy_registry_names(hass, entry)
 
         entry.async_on_unload(entry.add_update_listener(update_listener))
-        _setup_device_rename_listener(hass, entry, device_type)
 
         async def async_run_my_controller(_now=None):
             """Periodic execution of my_controller."""
@@ -262,62 +257,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 @callback
-def _async_disable_registry_entity_name_prefix(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Entity names are built completely by the entities - Home Assistant must not prepend the device name to them."""
+def _async_migrate_master_device_name(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """One-time rename of the Master device from 'OKTE Master' to 'OKTE' (entity names 'OKTE Current Price').
+
+    A name the user gave the device in the UI (name_by_user) would take precedence, so it is cleared once.
+    A later rename in the UI is kept - this runs only while the entry still has the old name.
+    """
+    if entry.data.get(CONF_DEVICE_NAME) == MASTER_DEVICE_NAME and entry.title == MASTER_DEVICE_NAME:
+        # A previous version of this migration also set the entry title to "OKTE" - restore "Master"
+        hass.config_entries.async_update_entry(entry, title=MASTER_ENTRY_TITLE)
+        return
+    if entry.data.get(CONF_DEVICE_NAME) != LEGACY_MASTER_DEVICE_NAME:
+        return
+    device_registry = dr.async_get(hass)
+    for device_entry in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
+        if (DOMAIN, entry.entry_id) in device_entry.identifiers:
+            device_registry.async_update_device(device_entry.id, name=MASTER_DEVICE_NAME, name_by_user=None)
+    hass.config_entries.async_update_entry(
+        entry,
+        title=MASTER_ENTRY_TITLE,
+        data={**entry.data, CONF_DEVICE_NAME: MASTER_DEVICE_NAME},
+    )
+    LOGGER.info("OKTE Master device renamed to '%s'", MASTER_DEVICE_NAME)
+
+
+@callback
+def _async_remove_legacy_registry_names(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove entity names that older versions wrote into the entity registry.
+
+    Home Assistant puts the device name in front of a registry name, so a stored name like
+    'OKTE - Battery - Detector Lowest Price' was shown as 'Battery OKTE - Battery - Detector Lowest Price'.
+    Only names generated by older versions are removed - names set by the user stay untouched.
+    """
     entity_registry = er.async_get(hass)
     for entity_entry in er.async_entries_for_config_entry(entity_registry, entry.entry_id):
-        if entity_entry.has_entity_name:
-            entity_registry.async_update_entity(entity_entry.entity_id, has_entity_name=False)
-
-
-def _setup_device_rename_listener(hass: HomeAssistant, entry: ConfigEntry, device_type: str) -> None:
-    """One device registry listener per entry: refresh entity names when the user renames the device."""
-
-    @callback
-    def device_registry_updated(event):
-        if event.data.get("action") != "update":
-            return
-        device_entry = dr.async_get(hass).async_get(event.data.get("device_id"))
-        if not device_entry or (DOMAIN, entry.entry_id) not in device_entry.identifiers:
-            return
-
-        changes = event.data.get("changes", {})
-        if (
-            device_type == DEVICE_TYPE_CALCULATOR
-            and "name_by_user" in changes
-            and entry.runtime_data.include_device_name_in_entity
-        ):
-            hass.async_create_task(_async_update_registry_names(hass, entry, device_entry, True))
-
-        # Entities build their names from the device name - let them write their state again
-        async_dispatcher_send(hass, SIGNAL_NAME_UPDATE.format(entry.entry_id))
-
-    entry.async_on_unload(hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, device_registry_updated))
-
-
-async def _async_update_registry_names(hass: HomeAssistant, entry: ConfigEntry, device_entry, include_device_name: bool) -> None:
-    """Rewrite the entity names in the entity registry according to the device name and prefix setting."""
-    translations = await async_load_translations(hass)
-    entity_registry = er.async_get(hass)
-    device_label = device_entry.name_by_user or device_entry.name
-    device_type = entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_MASTER)
-
-    for entity_entry in er.async_entries_for_device(entity_registry, device_entry.id):
-        translation_key = entity_entry.translation_key
-        if not translation_key or not translations:
+        stored_name = entity_entry.name
+        translated_name = entity_entry.original_name
+        if stored_name is None or not translated_name:
             continue
-        domain = entity_entry.entity_id.split('.')[0]
-        entity_trans = translations.get("entity", {}).get(domain, {}).get(translation_key, {})
-        translated_name = entity_trans.get("name", translation_key.replace('_', ' ').title())
-
-        if not include_device_name:
-            new_entity_name = translated_name
-        elif device_type == DEVICE_TYPE_MASTER:
-            new_entity_name = f"OKTE - {translated_name}"
-        else:
-            new_entity_name = f"OKTE - {device_label} - {translated_name}"
-
-        entity_registry.async_update_entity(entity_entry.entity_id, name=new_entity_name)
+        if (
+            stored_name in (translated_name, f"OKTE - {translated_name}")
+            or (stored_name.startswith("OKTE - ") and stored_name.endswith(f" - {translated_name}"))
+        ):
+            entity_registry.async_update_entity(entity_entry.entity_id, name=None)
 
 
 def _loaded_entries(hass: HomeAssistant, device_type: str | None = None) -> list[ConfigEntry]:
@@ -334,8 +316,7 @@ async def fetch_data_service(call: ServiceCall) -> None:
     """Handle fetch data service call - fetch prices for all Master devices."""
     entries = _loaded_entries(call.hass, DEVICE_TYPE_MASTER)
     if not entries:
-        LOGGER.error("No OKTE Master device configured")
-        return
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_master_device")
     for loaded_entry in entries:
         await loaded_entry.runtime_data.instance.fetch_and_process_data()
         async_dispatcher_send(call.hass, SIGNAL_FEEDBACK_UPDATE.format(loaded_entry.entry_id))
@@ -354,8 +335,6 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
 
     runtime_data = getattr(entry, 'runtime_data', None)
-    old_include_device_name = runtime_data.include_device_name_in_entity if runtime_data else None
-    new_include_device_name = _option(entry, CONF_INCLUDE_DEVICE_NAME_IN_ENTITY, DEFAULT_INCLUDE_DEVICE_NAME_IN_ENTITY)
 
     old_options = runtime_data.options if runtime_data else {}
     new_options = entry.options
@@ -373,16 +352,6 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     LOGGER.debug("Config options changed, reloading entry %s", entry.entry_id)
     await hass.config_entries.async_reload(entry.entry_id)
-
-    # If the prefix checkbox changed, update entity names in the registry
-    if old_include_device_name is not None and old_include_device_name != new_include_device_name:
-        device_entry = None
-        for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id):
-            if reg_entry.device_id:
-                device_entry = dr.async_get(hass).async_get(reg_entry.device_id)
-                break
-        if device_entry:
-            await _async_update_registry_names(hass, entry, device_entry, new_include_device_name)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

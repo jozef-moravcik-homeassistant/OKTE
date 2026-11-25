@@ -16,8 +16,9 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.const import EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -66,12 +67,12 @@ from .const import (
     PRICE_UNIT_EUR_MWH,
     PRICE_UNIT_LABELS,
     SIGNAL_FEEDBACK_UPDATE,
-    SIGNAL_NAME_UPDATE,
     STATE_FALSE,
     STATE_WINDOW_FOUND,
     STATE_WINDOW_NOT_FOUND,
     VERSION,
     async_load_translations,
+    entity_name,
     get_calculator_number_from_name,
 )
 
@@ -193,7 +194,7 @@ def _search_window_value(instance, time_keys, cross_day=False):
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up sensor entities."""
     instance = entry.runtime_data.instance
@@ -214,8 +215,8 @@ async def async_setup_entry(
 class SensorEntityDefinition(SensorEntity):
     """OKTE sensor - value and attributes come from the device instance."""
 
-    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
-    _attr_has_entity_name = False
+    # Home Assistant puts the device name in front of the entity name: "<device> <name>"
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -246,7 +247,7 @@ class SensorEntityDefinition(SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{entity_id}"
 
         translated = (translations or {}).get("entity", {}).get("sensor", {}).get(entity_id, {}).get("name")
-        self._original_translated_name = translated or name
+        self._attr_name = entity_name(translated or name)
 
         self._attr_icon = icon
         self._attr_native_value = default_value
@@ -282,18 +283,6 @@ class SensorEntityDefinition(SensorEntity):
             configuration_url=DOCUMENTATION_URL,
         )
 
-    @property
-    def name(self) -> str:
-        """Return the name of the entity - dynamically generated."""
-        translated_name = self._original_translated_name
-        if not self._instance.settings.include_device_name_in_entity:
-            return translated_name
-        if self._device_type == DEVICE_TYPE_MASTER:
-            return f"OKTE - {translated_name}"
-        device_entry = self.device_entry
-        device_label = device_entry.name_by_user if device_entry and device_entry.name_by_user else self._instance.settings.device_name
-        return f"OKTE - {device_label} - {translated_name}"
-
     def _set_value(self, value) -> None:
         """Store a value from the instance in the entity."""
         if self._entity_id in WINDOW_SENSORS:
@@ -317,9 +306,6 @@ class SensorEntityDefinition(SensorEntity):
 
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_FEEDBACK_UPDATE.format(self._entry_id), self._handle_feedback_update)
-        )
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
 
     @callback

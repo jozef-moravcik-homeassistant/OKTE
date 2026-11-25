@@ -14,8 +14,8 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
@@ -28,10 +28,10 @@ from .const import (
     ENTITY_PREFIX,
     MANUFACTURER,
     MODEL_CALCULATOR,
-    SIGNAL_NAME_UPDATE,
     VERSION,
     apply_sun_prefix,
     async_load_translations,
+    entity_name,
     get_calculator_number_from_name,
     parse_sun_time,
 )
@@ -42,7 +42,7 @@ LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up OKTE switch entities (Calculator devices only)."""
     if config_entry.data.get(CONF_DEVICE_TYPE) != DEVICE_TYPE_CALCULATOR:
@@ -59,8 +59,8 @@ async def async_setup_entry(
 class OkteAutoTimeSwitch(SwitchEntity):
     """Switch entity for automatic day start/end time setting."""
 
-    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
-    _attr_has_entity_name = False
+    # Home Assistant puts the device name in front of the entity name: "<device> <name>"
+    _attr_has_entity_name = True
     
     def __init__(
         self, 
@@ -83,7 +83,7 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # Generate entity_id
         calculator_number = get_calculator_number_from_name(instance.settings.device_name)
         self.entity_id = f"switch.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
-        self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{entity_id}"
+        # unique_id is provided by the unique_id property (format kept for existing entities)
         
         # Set initial value from instance or default
         if hasattr(instance, 'switch_values') and entity_id in instance.switch_values:
@@ -127,11 +127,6 @@ class OkteAutoTimeSwitch(SwitchEntity):
         # If switch is ON at startup, update the time value
         if self._attr_is_on:
             await self._update_time_value()
-
-        # Device renamed - write the state again to refresh the name
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
-        )
     
     @callback
     def _handle_update(self) -> None:
@@ -285,25 +280,12 @@ class OkteAutoTimeSwitch(SwitchEntity):
     
     @property
     def name(self) -> str:
-        """Return the name - dynamically generated with device prefix."""
+        """Return the entity part of the name (Home Assistant adds the device name)."""
         translated_name = (
             self._translations.get("entity", {}).get("switch", {}).get(self._entity_id_key, {}).get("name")
             or self._entity_id_key
         )
-        
-        # Apply prefix based on checkbox setting
-        if self.instance.settings.include_device_name_in_entity:
-            # Calculator: "OKTE - {device_label} - {translated_name}"
-            device_entry = self.device_entry
-            
-            if device_entry and device_entry.name_by_user:
-                device_label = device_entry.name_by_user
-            else:
-                device_label = self.instance.settings.device_name
-            
-            return f"OKTE - {device_label} - {translated_name}"
-        else:
-            return translated_name
+        return entity_name(translated_name)
     
     @property
     def icon(self) -> str:

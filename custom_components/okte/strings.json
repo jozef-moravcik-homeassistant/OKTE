@@ -5,19 +5,11 @@
         "title": "OKTE Master Device",
         "description": "Configure Master device for API data fetching",
         "data": {
-          "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
           "fetch_time": "Daily fetch time (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Number of weeks included in averages",
           "failover_days": "Number of days included in averages",
           "price_unit": "Unit of price sensors"
-        }
-      },
-      "window_parameters": {
-        "title": "OKTE Calculator Device",
-        "description": "Configure OKTE Calculator device for time window calculations",
-        "data": {
-          "include_device_name_in_entity": "Insert device name before entity name"
         }
       }
     },
@@ -32,21 +24,16 @@
         "title": "OKTE Master Device Settings",
         "description": "Configure Master device settings",
         "data": {
-          "include_device_name_in_entity": "Add 'OKTE -' prefix to entity names",
           "fetch_time": "Daily fetch time (HH:MM)",
           "data_failover_mode": "Data Failover Mode",
           "failover_weeks": "Number of weeks included in averages",
           "failover_days": "Number of days included in averages",
           "price_unit": "Unit of price sensors"
         }
-      },
-      "window_parameters": {
-        "title": "OKTE Calculator Device Settings",
-        "description": "Configure OKTE Calculator device settings",
-        "data": {
-          "include_device_name_in_entity": "Insert device name before entity name"
-        }
       }
+    },
+    "abort": {
+      "no_options": "The Calculator device has no settings."
     }
   },
   "services": {
@@ -56,12 +43,6 @@
     }
   },
   "selector": {
-    "device_type": {
-      "options": {
-        "master": "Master (API Data Fetcher)",
-        "window": "OKTE Calculator (Time Window Calculator)"
-      }
-    },
     "data_failover_mode": {
       "options": {
         "weekdays": "Averages by week days",
@@ -234,6 +215,9 @@
     },
     "auto_mode_sunset": {
       "message": "The time cannot be changed - it is set automatically from sunset. Switch off the corresponding switch first."
+    },
+    "no_master_device": {
+      "message": "No Master device configured. Please add a Master device first."
     }
   }
 }

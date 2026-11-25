@@ -13,8 +13,8 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     CONF_DEVICE_TYPE,
@@ -26,9 +26,9 @@ from .const import (
     ENTITY_PREFIX,
     MANUFACTURER,
     MODEL_CALCULATOR,
-    SIGNAL_NAME_UPDATE,
     VERSION,
     async_load_translations,
+    entity_name,
     get_calculator_number_from_name,
 )
 
@@ -38,7 +38,7 @@ LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up OKTE number entities (Calculator devices only)."""
     if config_entry.data.get(CONF_DEVICE_TYPE) != DEVICE_TYPE_CALCULATOR:
@@ -55,8 +55,8 @@ async def async_setup_entry(
 class OkteNumberEntity(NumberEntity):
     """Number entity for window size settings."""
 
-    # The full name (incl. "OKTE -" prefix and device name) is built in the name property - do not let HA prepend the device name
-    _attr_has_entity_name = False
+    # Home Assistant puts the device name in front of the entity name: "<device> <name>"
+    _attr_has_entity_name = True
     
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, instance, entity_id: str, translations: dict | None = None):
         """Initialize the number entity."""
@@ -75,7 +75,7 @@ class OkteNumberEntity(NumberEntity):
         # Generate entity_id
         calculator_number = get_calculator_number_from_name(instance.settings.device_name)
         self.entity_id = f"number.{ENTITY_PREFIX}_{calculator_number}_{entity_id}"
-        self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{entity_id}"
+        # unique_id is provided by the unique_id property (format kept for existing entities)
         
         # Load value from config_entry.options (persistent storage)
         self._attr_native_value = config_entry.options.get(entity_id, 3)  # Default 3 hours
@@ -96,10 +96,6 @@ class OkteNumberEntity(NumberEntity):
                 f"{DOMAIN}_number_update_{self.config_entry.entry_id}",
                 self._handle_update
             )
-        )
-        # Device renamed - write the state again to refresh the name
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_NAME_UPDATE.format(self._entry_id), self.async_write_ha_state)
         )
     
     @callback
@@ -153,25 +149,12 @@ class OkteNumberEntity(NumberEntity):
     
     @property
     def name(self) -> str:
-        """Return the name - dynamically generated with device prefix."""
+        """Return the entity part of the name (Home Assistant adds the device name)."""
         translated_name = (
             self._translations.get("entity", {}).get("number", {}).get(self._entity_id_key, {}).get("name")
             or self._entity_id_key
         )
-        
-        # Apply prefix based on checkbox setting
-        if self.instance.settings.include_device_name_in_entity:
-            # Calculator: "OKTE - {device_label} - {translated_name}"
-            device_entry = self.device_entry
-            
-            if device_entry and device_entry.name_by_user:
-                device_label = device_entry.name_by_user
-            else:
-                device_label = self.instance.settings.device_name
-            
-            return f"OKTE - {device_label} - {translated_name}"
-        else:
-            return translated_name
+        return entity_name(translated_name)
     
     @property
     def icon(self) -> str:
